@@ -1,8 +1,11 @@
 ---
-- name: Install 
+- name: Install
   dnf:
-    name: mongodb-server
+    name: "{{ item }}"
     state: latest
+  with_items:
+    - mongodb-server
+    - python3-pymongo
   become: True
 
 - name: listen on all interfaces
@@ -13,12 +16,29 @@
     backup: yes
   become: True
 
-
 - name: Start and enable mongodb
   systemd:
     name: mongod
     state: started
     enabled: True
+  become: True
+
+- name: Create Admin account
+  mongodb_user:
+    database: admin
+    name: admin
+    password: admin
+    roles:
+      - userAdminAnyDatabase
+
+- name: Create database and user
+  mongodb_user:
+    database: "{{ database }}"
+    name: "{{ username }}"
+    password: "{{ password }}"
+    login_user: admin
+    login_password: admin
+    state: present
   become: True
 
 

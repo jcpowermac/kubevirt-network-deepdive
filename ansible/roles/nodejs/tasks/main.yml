@@ -6,17 +6,38 @@
   with_items:
     - npm
     - git
-  become: True    
+  become: True
 
 - name: Clone repo
   git:
-    repo: "https://github.com/sclorg/nodejs-ex/"
-    dest: "/root/nodejs-ex"
+    repo: "{{ app_repo }}"
+    dest: "{{ app_path }}"
   become: True
 
 - name: npm install
   command: "npm install"
   args:
-    chdir: "/root/nodejs-ex"
+    chdir: "{{ app_path }}"
+  become: True
+
+- name: Create config
+  template:
+    src: nodejs.j2
+    dest: /etc/sysconfig/nodejs
+    mode: 0664
+  become: True
+
+- name: Create systemd unit
+  template:
+    src: nodejs.service.j2
+    dest: /etc/systemd/system/nodejs.service
+    mode: 0664
+  become: True
+
+- name: Reload
+  systemd:
+    daemon_reload: True
+    name: nodejs
+    state: started
   become: True
 

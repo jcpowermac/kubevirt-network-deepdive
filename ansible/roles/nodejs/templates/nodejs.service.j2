@@ -1,0 +1,17 @@
+
+[Unit]
+Description=OpenShift NodeJS Example
+After=network.target
+
+[Service]
+WorkingDirectory={{ app_path }}
+EnvironmentFile=/etc/sysconfig/nodejs
+ExecStart=/usr/bin/node {{ app_path }}/server.js
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=process
+Restart=on-failure
+RestartSec=42s
+
+[Install]
+WantedBy=multi-user.target
+

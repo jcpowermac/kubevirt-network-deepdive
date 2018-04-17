@@ -1,1 +1,9 @@
 ---
+
+app_repo: "https://github.com/sclorg/nodejs-ex/"
+app_path: "/opt/nodejs-ex"
+app_name: "nodejs"
+service: "mongodb"
+username: nodejs
+password: nodejspassword
+database: nodejs
