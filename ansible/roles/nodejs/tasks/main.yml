@@ -1,0 +1,22 @@
+---
+- name: Install node
+  dnf:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - npm
+    - git
+  become: True    
+
+- name: Clone repo
+  git:
+    repo: "https://github.com/sclorg/nodejs-ex/"
+    dest: "/root/nodejs-ex"
+  become: True
+
+- name: npm install
+  command: "npm install"
+  args:
+    chdir: "/root/nodejs-ex"
+  become: True
+

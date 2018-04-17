@@ -1,0 +1,27 @@
+---
+- name: Install 
+  dnf:
+    name: mongodb-server
+    state: latest
+  become: True
+
+- name: listen on all interfaces
+  lineinfile:
+    path: /etc/mongod.conf
+    regexp: "^(.*)bindIp:(.*)$"
+    line: "  bindIp: 0.0.0.0"
+    backup: yes
+  become: True
+
+
+- name: Start and enable mongodb
+  systemd:
+    name: mongod
+    state: started
+    enabled: True
+  become: True
+
+
+
+
+

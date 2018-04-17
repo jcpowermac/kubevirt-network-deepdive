@@ -1,0 +1,14 @@
+---
+
+- name: Configure Mongo
+  hosts: mongodb
+  gather_facts: True
+  roles:
+    - mongodb
+
+- name: Configure Nodejs
+  hosts: nodejs 
+  gather_facts: True
+  roles:
+    - nodejs
+

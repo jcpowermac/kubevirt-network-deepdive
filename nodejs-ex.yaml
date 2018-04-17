@@ -1,0 +1,136 @@
+---
+apiVersion: kubevirt.io/v1alpha1
+kind: OfflineVirtualMachine
+metadata:
+  annotations: {}
+  name: nodejs
+  namespace: nodejs-ex
+spec:
+  running: false
+  template:
+    metadata:
+      labels:
+        name: nodejs
+        app: nodejs
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: kn1.virtomation.com
+      domain:
+        cpu:
+          cores: 2
+        devices:
+          disks:
+          - disk:
+              bus: virtio
+            name: disk0
+            volumeName: nodejs-vol0
+          - cdrom:
+              readonly: true
+            name: cloudinitdisk
+            volumeName: cloudinitvolume
+        machine:
+          type: q35
+        resources:
+          requests:
+            memory: 1024M
+      volumes:
+      - name: nodejs-vol0
+        registryDisk:
+          image: kubevirt/fedora-cloud-registry-disk-demo
+      - cloudInitNoCloud:
+          userDataBase64: I2Nsb3VkLWNvbmZpZwpob3N0bmFtZTogbm9kZWpzCnNzaF9wd2F1dGg6IFRydWUKZGlzYWJsZV9yb290OiBmYWxzZQpzc2hfYXV0aG9yaXplZF9rZXlzOgotIHNzaC1yc2EgQUFBQUIzTnphQzF5YzJFQUFBQURBUUFCQUFBQkFRREdsaVRlN1RFcnVqODlxWVFkM0VqcDBIeHJWYXp1bldtVXVUeWEzQjhxR2FQSkxacVJYQU9DTWhkM2VSMkdjZEhRc051SjU4RVBQM1dTT3o4VXFaRTQveTRGY1FyZ0hKc1B5ZXRrZ2c4YVBpeElJcGw5OFBUUUxYSmxwT3Y0NUpMWmhGalN0bGtuazhqZkpzWisxOURWQ1Nxa05pdCtGNnZUWGJuYjdrYnBydlBOUGZqQ2VCYTR5OUxreDU3NnpSZnd3VWdCRnFGYkozTFJ5ZFJTemNvalBsZU5jaXJDUnk4c3BTMC9ZbjlYVjlxeGttbENHTUg2VUo0bCtoRHhzaW54L2RDcjAyQkN5VitKWENqb2JGa0RVeithb0VUcnNtcDBOaTZrcmtXYnJlcTJndk50aW9LNmJxNmJnZ3FiSDBuRXRZcGtpZlJGbm5IK1lyK0xmRWtsIHJvb3RAa20xLnZpcnRvbWF0aW9uLmNvbQo=
+        name: cloudinitvolume
+
+---
+apiVersion: kubevirt.io/v1alpha1
+kind: OfflineVirtualMachine
+metadata:
+  annotations: {}
+  name: mongodb
+  namespace: nodejs-ex
+spec:
+  running: false
+  template:
+    metadata:
+      labels:
+        name: mongodb
+        app: mongodb
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: kn2.virtomation.com
+      domain:
+        cpu:
+          cores: 2
+        devices:
+          disks:
+          - disk:
+              bus: virtio
+            name: disk0
+            volumeName: mongodb-vol0
+          - cdrom:
+              readonly: true
+            name: cloudinitdisk
+            volumeName: cloudinitvolume
+        machine:
+          type: q35
+        resources:
+          requests:
+            memory: 1024M
+      volumes:
+      - name: mongodb-vol0
+        registryDisk:
+          image: kubevirt/fedora-cloud-registry-disk-demo
+      - cloudInitNoCloud:
+          userDataBase64: I2Nsb3VkLWNvbmZpZwpob3N0bmFtZTogbW9uZ29kYgpzc2hfcHdhdXRoOiBUcnVlCmRpc2FibGVfcm9vdDogZmFsc2UKc3NoX2F1dGhvcml6ZWRfa2V5czoKLSBzc2gtcnNhIEFBQUFCM056YUMxeWMyRUFBQUFEQVFBQkFBQUJBUURHbGlUZTdURXJ1ajg5cVlRZDNFanAwSHhyVmF6dW5XbVV1VHlhM0I4cUdhUEpMWnFSWEFPQ01oZDNlUjJHY2RIUXNOdUo1OEVQUDNXU096OFVxWkU0L3k0RmNRcmdISnNQeWV0a2dnOGFQaXhJSXBsOThQVFFMWEpscE92NDVKTFpoRmpTdGxrbms4amZKc1orMTlEVkNTcWtOaXQrRjZ2VFhibmI3a2JwcnZQTlBmakNlQmE0eTlMa3g1NzZ6UmZ3d1VnQkZxRmJKM0xSeWRSU3pjb2pQbGVOY2lyQ1J5OHNwUzAvWW45WFY5cXhrbWxDR01INlVKNGwraER4c2lueC9kQ3IwMkJDeVYrSlhDam9iRmtEVXorYW9FVHJzbXAwTmk2a3JrV2JyZXEyZ3ZOdGlvSzZicTZiZ2dxYkgwbkV0WXBraWZSRm5uSCtZcitMZkVrbCByb290QGttMS52aXJ0b21hdGlvbi5jb20K
+        name: cloudinitvolume
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: mongodb
+  namespace: nodejs-ex
+  labels:
+    kubevirt.io: virt-launcher
+    kubevirt.io/domain: mongodb
+spec:
+  selector:
+    kubevirt.io: virt-launcher
+    kubevirt.io/domain: mongodb
+  ports:
+  - protocol: TCP
+    port: 27017
+    targetPort: 27017
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: nodejs
+  namespace: nodejs-ex
+  labels:
+    kubevirt.io: virt-launcher
+    kubevirt.io/domain: nodejs
+spec:
+  selector:
+    kubevirt.io: virt-launcher
+    kubevirt.io/domain: nodejs
+  ports:
+  - protocol: TCP
+    port: 8080
+    targetPort: 8080
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: nodejs
+  namespace: nodejs-ex
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+spec:
+  rules:
+  - host: nodejs.example.com
+    http:
+      paths:
+      - backend:
+          serviceName: nodejs
+          servicePort: 8080
