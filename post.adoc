@@ -110,7 +110,17 @@ sysctl --system
 ----
 
 
-Disable selinux
+Temporarily Disable selinux
+[source,bash]
+----
+setenforce 0
+----
+
+And permanently
+
+If this isn't done if you reboot your node kubernetes won't start and then you will be wondering
+what happened :)
+
 [source,bash]
 ----
 cat <<EOF > /etc/selinux/config
@@ -128,10 +138,6 @@ SELINUXTYPE=targeted
 EOF
 ----
 
-[source,bash]
-----
-setenforce 0
-----
 
 
 == Initialize cluster
@@ -366,9 +372,21 @@ address=/.ingress.virtomation.com/172.31.50.231
 
 = Networking in detail
 
+== Kubernetes-level
 
-WIP
-== endpoints
+=== services
+
+[source,bash]
+----
+$ kubectl get services -n nodejs-ex
+NAME      TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)     AGE
+mongodb   ClusterIP   10.108.188.170   <none>        27017/TCP   3h
+nodejs    ClusterIP   10.110.233.114   <none>        8080/TCP    3h
+----
+
+=== endpoints
+
+Below are the endpoints for the virtual machines that were created above.
 [source,bash]
 ----
 $ kubectl get endpoints -n nodejs-ex
@@ -377,8 +395,20 @@ mongodb   10.244.2.7:27017   1h
 nodejs    10.244.1.8:8080    1h
 ----
 
-== Services
+=== ingress
 
+[source,bash]
+----
+$ kubectl get ingress -n nodejs-ex
+NAME      HOSTS                            ADDRESS   PORTS     AGE
+nodejs    nodejs.ingress.virtomation.com             80        3h
+----
+
+== Host-level
+
+=== iptables
+
+https://kubernetes.io/docs/tasks/debug-application-cluster/debug-service/#is-kube-proxy-writing-iptables-rules
 [source,bash]
 ----
 [root@kn1 ~]# iptables -n -L -t nat | grep nodejs-ex
@@ -394,6 +424,7 @@ KUBE-SEP-JOPA2J4R76O5OVH5  all  --  0.0.0.0/0            0.0.0.0/0            /*
 KUBE-SEP-QD4L7MQHCIVOWZAO  all  --  0.0.0.0/0            0.0.0.0/0            /* nodejs-ex/mongodb: */
 ----
 
+=== routes
 [source,bash]
 ----
 [root@kn1 ~]# ip r
@@ -405,6 +436,7 @@ default via 172.31.50.1 dev eth0
 172.31.50.0/24 dev eth0 proto kernel scope link src 172.31.50.231
 ----
 
+=== bridge
 [source,bash]
 ----
 [root@kn1 ~]# brctl show
@@ -419,8 +451,39 @@ cni0            8000.0a580af40101       no              veth05e4e005
 docker0         8000.0242448313a4       no
 ----
 
+=== interfaces
+[source,bash]
+----
+[root@kn1 ~]# ip l
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT qlen 1
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP mode DEFAULT qlen 1000
+    link/ether 52:54:00:97:a6:ee brd ff:ff:ff:ff:ff:ff
+3: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN mode DEFAULT
+    link/ether 02:42:44:83:13:a4 brd ff:ff:ff:ff:ff:ff
+4: flannel.1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UNKNOWN mode DEFAULT
+    link/ether ce:4e:fb:41:1d:af brd ff:ff:ff:ff:ff:ff
+5: cni0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UP mode DEFAULT qlen 1000
+    link/ether 0a:58:0a:f4:01:01 brd ff:ff:ff:ff:ff:ff
+6: vethb4424886@if3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue master cni0 state UP mode DEFAULT
+    link/ether 96:80:89:97:86:76 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+7: veth1657737b@if3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue master cni0 state UP mode DEFAULT
+    link/ether de:fc:0d:0c:91:31 brd ff:ff:ff:ff:ff:ff link-netnsid 1
+8: vethdfd32c87@if3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue master cni0 state UP mode DEFAULT
+    link/ether b6:6c:cf:59:89:2d brd ff:ff:ff:ff:ff:ff link-netnsid 2
+9: vethed0f8c9a@if3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue master cni0 state UP mode DEFAULT
+    link/ether 32:02:6d:0a:24:17 brd ff:ff:ff:ff:ff:ff link-netnsid 3
+10: veth05e4e005@if3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue master cni0 state UP mode DEFAULT
+    link/ether b6:94:64:09:7c:57 brd ff:ff:ff:ff:ff:ff link-netnsid 4
+11: veth25933a54@if3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue master cni0 state UP mode DEFAULT
+    link/ether 82:8a:63:32:8c:0a brd ff:ff:ff:ff:ff:ff link-netnsid 5
+12: vethe3d701e7@if3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue master cni0 state UP mode DEFAULT
+    link/ether 96:9a:ac:ec:d1:02 brd ff:ff:ff:ff:ff:ff link-netnsid 6
+----
 
-*nodejs virtual machine*
+== Pod-level
+
+=== bridge
 
 [source,bash]
 ----
@@ -431,6 +494,11 @@ docker0         8000.0242448313a4       no
 bridge name     bridge id               STP enabled     interfaces
 br1             8000.a697da96cf07       no              eth0
                                                         vnet0
+----
+
+=== interfaces
+[source,bash]
+----
 [root@kn1 ~]# docker exec -it 8424fcb0b3da ip a
 1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1
     link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
@@ -452,5 +520,24 @@ br1             8000.a697da96cf07       no              eth0
     link/ether fe:58:0a:f4:01:08 brd ff:ff:ff:ff:ff:ff
     inet6 fe80::fc58:aff:fef4:108/64 scope link
        valid_lft forever preferred_lft forever
+----
 
+== VM-level
+
+=== interfaces
+[source,bash]
+----
+[fedora@nodejs ~]$ ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host
+       valid_lft forever preferred_lft forever
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 0a:58:0a:f4:01:08 brd ff:ff:ff:ff:ff:ff
+    inet 10.244.1.8/24 brd 10.244.1.255 scope global dynamic eth0
+       valid_lft 86299761sec preferred_lft 86299761sec
+    inet6 fe80::858:aff:fef4:108/64 scope link
+       valid_lft forever preferred_lft forever
 ----
