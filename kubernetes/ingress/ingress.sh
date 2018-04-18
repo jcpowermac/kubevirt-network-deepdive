@@ -27,3 +27,5 @@ kubectl apply -f with-rbac.yaml
 
 kubectl apply -f service-nodeport.yaml
 
+kubectl apply -f ngnix-status-ingress.yaml
+

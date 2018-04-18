@@ -1,0 +1,161 @@
+= Kubevirt Network Deep Dive
+ifdef::backend-pdf[]
+:doctype: book
+:compat-mode!:
+:pagenums: :pygments-style: bw :source-highlighter: pygments
+:experimental:
+:specialnumbered!:
+:chapter-label:
+endif::[]
+:imagesdir: images
+:numbered:
+:toc:
+:toc-placement: preamble
+:icons: font
+:toclevels: 3
+:showtitle:
+
+{empty}
+
+
+[[installation]]
+== Installation
+Three CentOS 7.4 with nested virtualization enabled
+
+=== Packages
+
+
+[source,bash]
+----
+cat <<EOF > /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-\$basearch
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+EOF
+----
+
+[source,bash]
+----
+yum update -y
+yum install kubelet-1.9.4 \
+            kubeadm-1.9.4 \
+            kubectl-1.9.4 \
+            docker \
+            ansible \
+            git \
+            curl \
+            wget -y
+----
+
+=== Docker prerequisites
+[source,bash]
+----
+cat <<EOF > /etc/sysconfig/docker-storage-setup
+STORAGE_DRIVER=overlay2
+DEVS=/dev/vdb
+CONTAINER_ROOT_LV_NAME=dockerlv
+CONTAINER_ROOT_LV_SIZE=100%FREE
+CONTAINER_ROOT_LV_MOUNT_PATH=/var/lib/docker
+VG=dockervg
+EOF
+
+systemctl start docker
+systemctl enable docker
+----
+
+
+=== Kubernetes prerequisites
+
+[source,bash]
+----
+systemctl enable kubelet
+----
+
+[source,bash]
+----
+cat <<EOF >  /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+EOF
+
+sysctl --system
+----
+
+[source,bash]
+----
+cat <<EOF > /etc/selinux/config
+# This file controls the state of SELinux on the system.
+# SELINUX= can take one of these three values:
+#     enforcing - SELinux security policy is enforced.
+#     permissive - SELinux prints warnings instead of enforcing.
+#     disabled - No SELinux policy is loaded.
+SELINUX=disabled
+# SELINUXTYPE= can take one of three two values:
+#     targeted - Targeted processes are protected,
+#     minimum - Modification of targeted policy. Only selected processes are protected.
+#     mls - Multi Level Security protection.
+SELINUXTYPE=targeted
+EOF
+
+setenforce 0
+----
+
+
+== Initialize cluster
+
+[source,bash]
+----
+
+kubeadm init --pod-network-cidr=10.244.0.0/16
+mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+----
+
+=== Kubernetes CNI - replace
+
+[source,bash]
+----
+kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/v0.9.1/Documentation/kube-flannel.yml
+----
+
+=== Join and Check status...
+[source,bash]
+----
+kubeadm join  --token 045c1c.04765c236e1bd8da \
+              172.31.50.221:6443 \
+              --discovery-token-ca-cert-hash \
+              sha256:40a8e6d28843ad69cb195b7a27909c6165fe968aca4d27fff2b25d067a2a4e95
+----
+
+[source,bash]
+----
+$ kubectl get node
+NAME                  STATUS    ROLES     AGE       VERSION
+km1.virtomation.com   Ready     master    11m       v1.9.4
+kn1.virtomation.com   Ready     <none>    10m       v1.9.4
+kn2.virtomation.com   Ready     <none>    10m       v1.9.4
+----
+
+
+
+
+== Skydive - replace
+[source,bash]
+----
+kubectl create ns skydive
+kubectl create -n skydive -f https://raw.githubusercontent.com/skydive-project/skydive/master/contrib/kubernetes/skydive.yaml
+----
+
+
+== Ingress, virtual machines
+
+[source,bash]
+----
+git clone https://github.com/jcpowermac/kubevirt-network-deepdive
+----
