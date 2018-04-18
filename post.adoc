@@ -18,13 +18,29 @@ endif::[]
 {empty}
 
 
-[[installation]]
-== Installation
-Three CentOS 7.4 with nested virtualization enabled
+= Introduction
 
-=== Packages
+How does networking function when using Kubevirt?
+The first part of this post will be the steps I used to investigate
+this - including installing Kubernetes 1.9.x, Flannel, Skydive, ingress-nginx and kubevirt.
+Then I will walk through the Linux networking components used finishing up
+with the process kubevirt uses to build up networking for a virtual machine.
 
 
+[[install]]
+= Component Installation
+I have created three CentOS 7.4 with nested virtualization enabled where Kubernetes
+will be installed.
+
+== Kubernetes
+
+I am rehashing what is available in Kubernetes documentation[https://kubernetes.io/docs/setup/independent/install-kubeadm/]  just to make it easier to follow along and provide an identical environment that
+I used to research kubevirt networking.
+
+
+=== Updates, Kubernetes prerequisites and packages
+
+Add the Kubernetes repository
 [source,bash]
 ----
 cat <<EOF > /etc/yum.repos.d/kubernetes.repo
@@ -38,6 +54,7 @@ gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cl
 EOF
 ----
 
+Update and install prerequisites.
 [source,bash]
 ----
 yum update -y
@@ -52,6 +69,8 @@ yum install kubelet-1.9.4 \
 ----
 
 === Docker prerequisites
+
+Use a new disk for images and containers
 [source,bash]
 ----
 cat <<EOF > /etc/sysconfig/docker-storage-setup
@@ -62,19 +81,24 @@ CONTAINER_ROOT_LV_SIZE=100%FREE
 CONTAINER_ROOT_LV_MOUNT_PATH=/var/lib/docker
 VG=dockervg
 EOF
+----
 
+Start and enable Docker
+[source,bash]
+----
 systemctl start docker
 systemctl enable docker
 ----
 
 
-=== Kubernetes prerequisites
+=== Additional prerequisites
 
 [source,bash]
 ----
 systemctl enable kubelet
 ----
 
+This is a requirement for Flannel - pass bridged IPv4 traffic to iptables' chains
 [source,bash]
 ----
 cat <<EOF >  /etc/sysctl.d/k8s.conf
@@ -85,6 +109,8 @@ EOF
 sysctl --system
 ----
 
+
+Disable selinux
 [source,bash]
 ----
 cat <<EOF > /etc/selinux/config
@@ -100,13 +126,20 @@ SELINUX=disabled
 #     mls - Multi Level Security protection.
 SELINUXTYPE=targeted
 EOF
+----
 
+[source,bash]
+----
 setenforce 0
 ----
 
 
 == Initialize cluster
 
+https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/
+
+
+Now we are ready to initialize our first kubernetes node.
 [source,bash]
 ----
 
@@ -117,22 +150,21 @@ mkdir -p $HOME/.kube
 
 ----
 
-=== Kubernetes CNI - replace
-
+Install Flannel
 [source,bash]
 ----
 kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/v0.9.1/Documentation/kube-flannel.yml
 ----
 
-=== Join and Check status...
+Join additional nodes
 [source,bash]
 ----
-kubeadm join  --token 045c1c.04765c236e1bd8da \
-              172.31.50.221:6443 \
+kubeadm join  --token 045c1c.04765c236e1bd8da 172.31.50.221:6443 \
               --discovery-token-ca-cert-hash \
               sha256:40a8e6d28843ad69cb195b7a27909c6165fe968aca4d27fff2b25d067a2a4e95
 ----
 
+Check the node status
 [source,bash]
 ----
 $ kubectl get node
@@ -143,9 +175,34 @@ kn2.virtomation.com   Ready     <none>    10m       v1.9.4
 ----
 
 
+== Additional Components
+
+=== Kubevirt
+
+[source,bash]
+----
+$ kubectl create -f https://github.com/kubevirt/kubevirt/releases/download/v0.4.1/kubevirt.yaml
+serviceaccount "kubevirt-apiserver" created
+...
+customresourcedefinition "offlinevirtualmachines.kubevirt.io" created
+----
+
+Check status
+[source,bash]
+----
+$ kubectl get pod -n kube-system -l 'kubevirt.io'
+NAME                               READY     STATUS    RESTARTS   AGE
+virt-api-747745669-62cww           1/1       Running   0          4m
+virt-api-747745669-qtn7f           1/1       Running   0          4m
+virt-controller-648945bbcb-dfpwm   0/1       Running   0          4m
+virt-controller-648945bbcb-tppgx   1/1       Running   0          4m
+virt-handler-xlfc2                 1/1       Running   0          4m
+virt-handler-z5lsh                 1/1       Running   0          4m
+----
 
 
-== Skydive - replace
+=== Skydive
+
 [source,bash]
 ----
 kubectl create ns skydive
@@ -161,22 +218,25 @@ skydive-agent-c29l7                 1/1       Running   0          5m
 skydive-analyzer-5db567b4bc-m77kq   2/2       Running   0          5m
 ----
 
+=== ingress-nginx
 
-== Ingress, virtual machines
+https://github.com/kubernetes/ingress-nginx/tree/master/deploy
+
+`ingress.sh` is a simple bash script that follows
+the procedue to install ingress-nginx with a couple minor modifications.
+
+- Patch the nginx-configuration configmap to enable vts status
+- Add VTS status port to service, Deployment
+- Create an ingress to access nginx status page
 
 [source,bash]
 ----
 git clone https://github.com/jcpowermac/kubevirt-network-deepdive
+cd kubevirt-network-deepdive/kubernetes/ingress
+bash kubevirt-network-deepdive/kubernetes/ingress/ingress.sh
 ----
 
-== Ingress
-
-[source,bash]
-----
-cd kubevirt-network-deepdive/Kubernetes/ingress
-bash ingress.sh
-----
-
+Check status
 [source,bash]
 ----
 $ kubectl get pod -n ingress-nginx
@@ -186,51 +246,45 @@ nginx-ingress-controller-85c8787886-vf5tp   1/1       Running   0          1m
 ----
 
 
-== install kubevirt
+= Kubevirt Virtual Machines
 
+== Create objects
+
+Let's create a clean new namespace
 [source,bash]
 ----
-$ kubectl create -f https://github.com/kubevirt/kubevirt/releases/download/v0.4.1/kubevirt.yaml
-serviceaccount "kubevirt-apiserver" created
-...
-customresourcedefinition "offlinevirtualmachines.kubevirt.io" created
-----
-
-[source,bash]
-----
-$ kubectl get pod -n kube-system -l 'kubevirt.io'
-NAME                               READY     STATUS    RESTARTS   AGE
-virt-api-747745669-62cww           1/1       Running   0          4m
-virt-api-747745669-qtn7f           1/1       Running   0          4m
-virt-controller-648945bbcb-dfpwm   0/1       Running   0          4m
-virt-controller-648945bbcb-tppgx   1/1       Running   0          4m
-virt-handler-xlfc2                 1/1       Running   0          4m
-virt-handler-z5lsh                 1/1       Running   0          4m
-----
-
-
-
-
-[source,bash]
-----
-
 $ kubectl create ns nodejs-ex
 namespace "nodejs-ex" created
+----
 
-
+Create offline virtual machines, mongodb and nodejs service/ingress ???
+[source,bash]
+----
 $ kubectl create -f nodejs-ex.yaml -n nodejs-ex
 offlinevirtualmachine "nodejs" created
 offlinevirtualmachine "mongodb" created
 service "mongodb" created
 service "nodejs" created
 ingress "nodejs" created
+----
 
+Start the nodejs virtual machine
+[source,bash]
+----
 $ kubectl patch offlinevirtualmachine nodejs --type merge -p '{"spec":{"running":true}}' -n nodejs-ex
 offlinevirtualmachine "nodejs" patched
+----
 
+Start the mongodb virtual machine
+[source,bash]
+----
 $ kubectl patch offlinevirtualmachine mongodb --type merge -p '{"spec":{"running":true}}' -n nodejs-ex
 offlinevirtualmachine "mongodb" patched
+----
 
+Review kubevirt virtual machine objects
+[source,bash]
+----
 $ kubectl get ovms -n nodejs-ex
 NAME      AGE
 mongodb   7m
@@ -240,15 +294,24 @@ $ kubectl get vms -n nodejs-ex
 NAME      AGE
 mongodb   4m
 nodejs    5m
+----
 
 
+Where are our virtual machines and what is their ip address?
+[source,bash]
+----
 $ kubectl get pod -o wide -n nodejs-ex
 NAME                          READY     STATUS    RESTARTS   AGE       IP           NODE
 virt-launcher-mongodb-qdpmg   2/2       Running   0          4m        10.244.2.7   kn2.virtomation.com
 virt-launcher-nodejs-5r59c    2/2       Running   0          4m        10.244.1.8   kn1.virtomation.com
 ----
 
-=== install app
+== Install NodeJS Example Application
+
+To quickly deploy our example application ansible playbook and roles
+are included in the repository.  Two inventory files need to be modified
+before executing `anisble-playbook`.
+
 [source,bash]
 ----
 vim kubevirt-network-deepdive/ansible/inventory/group_vars/all.yml
@@ -257,8 +320,9 @@ vim kubevirt-network-deepdive/ansible/inventory/hosts.ini
 ansible-playbook -i inventory/hosts.ini playbook/main.yml
 ----
 
-=== find ingress url
+=== Determine Ingress URL
 
+First let's find the host.
 [source,bash]
 ----
 $ kubectl get ingress -n nodejs-ex
@@ -266,6 +330,7 @@ NAME      HOSTS                            ADDRESS   PORTS     AGE
 nodejs    nodejs.ingress.virtomation.com             80        22m
 ----
 
+Next what are the NodePorts?  For this example port 30000 will be used.
 [source,bash]
 ----
 $ kubectl get service ingress-nginx -n ingress-nginx
@@ -273,6 +338,7 @@ NAME            TYPE       CLUSTER-IP      EXTERNAL-IP   PORT(S)                
 ingress-nginx   NodePort   10.110.173.97   <none>        80:30000/TCP,443:30327/TCP,18080:32000/TCP   52m
 ----
 
+What node is the nginx-ingress controller running on?  This is needed to configure DNS.
 [source,bash]
 ----
 $ kubectl get pod -n ingress-nginx -o wide
@@ -281,14 +347,110 @@ default-http-backend-55c6c69b88-jpl95       1/1       Running   0          53m  
 nginx-ingress-controller-85c8787886-vf5tp   1/1       Running   0          53m       10.244.1.4   kn1.virtomation.com
 ----
 
-dnsmasq
+=== Configure DNS
+In my homelab I am using dnsmasq. To support ingress add the host where the controller is running as
+an A record.
+
 [source,bash]
 ----
 [root@dns1 ~]# cat /etc/dnsmasq.d/virtomation.conf
-
+...
 address=/km1.virtomation.com/172.31.50.221
 address=/kn1.virtomation.com/172.31.50.231
 address=/kn2.virtomation.com/172.31.50.232
-
 address=/.ingress.virtomation.com/172.31.50.231
+...
+----
+
+
+
+= Networking in detail
+
+
+WIP
+== endpoints
+[source,bash]
+----
+$ kubectl get endpoints -n nodejs-ex
+NAME      ENDPOINTS          AGE
+mongodb   10.244.2.7:27017   1h
+nodejs    10.244.1.8:8080    1h
+----
+
+== Services
+
+[source,bash]
+----
+[root@kn1 ~]# iptables -n -L -t nat | grep nodejs-ex
+KUBE-MARK-MASQ  all  --  10.244.1.8           0.0.0.0/0            /* nodejs-ex/nodejs: */
+DNAT       tcp  --  0.0.0.0/0            0.0.0.0/0            /* nodejs-ex/nodejs: */ tcp to:10.244.1.8:8080
+KUBE-MARK-MASQ  all  --  10.244.2.7           0.0.0.0/0            /* nodejs-ex/mongodb: */
+DNAT       tcp  --  0.0.0.0/0            0.0.0.0/0            /* nodejs-ex/mongodb: */ tcp to:10.244.2.7:27017
+KUBE-MARK-MASQ  tcp  -- !10.244.0.0/16        10.108.188.170       /* nodejs-ex/mongodb: cluster IP */ tcp dpt:27017
+KUBE-SVC-Z7W465PEPK7G2UVQ  tcp  --  0.0.0.0/0            10.108.188.170       /* nodejs-ex/mongodb: cluster IP */ tcp dpt:27017
+KUBE-MARK-MASQ  tcp  -- !10.244.0.0/16        10.110.233.114       /* nodejs-ex/nodejs: cluster IP */ tcp dpt:8080
+KUBE-SVC-LATB7COHB4ZMDCEC  tcp  --  0.0.0.0/0            10.110.233.114       /* nodejs-ex/nodejs: cluster IP */ tcp dpt:8080
+KUBE-SEP-JOPA2J4R76O5OVH5  all  --  0.0.0.0/0            0.0.0.0/0            /* nodejs-ex/nodejs: */
+KUBE-SEP-QD4L7MQHCIVOWZAO  all  --  0.0.0.0/0            0.0.0.0/0            /* nodejs-ex/mongodb: */
+----
+
+[source,bash]
+----
+[root@kn1 ~]# ip r
+default via 172.31.50.1 dev eth0
+10.244.0.0/24 via 10.244.0.0 dev flannel.1 onlink
+10.244.1.0/24 dev cni0 proto kernel scope link src 10.244.1.1
+10.244.2.0/24 via 10.244.2.0 dev flannel.1 onlink
+172.17.0.0/16 dev docker0 proto kernel scope link src 172.17.0.1
+172.31.50.0/24 dev eth0 proto kernel scope link src 172.31.50.231
+----
+
+[source,bash]
+----
+[root@kn1 ~]# brctl show
+bridge name     bridge id               STP enabled     interfaces
+cni0            8000.0a580af40101       no              veth05e4e005
+                                                        veth1657737b
+                                                        veth25933a54
+                                                        vethb4424886
+                                                        vethdfd32c87
+                                                        vethe3d701e7
+                                                        vethed0f8c9a
+docker0         8000.0242448313a4       no
+----
+
+
+*nodejs virtual machine*
+
+[source,bash]
+----
+[root@kn1 ~]# docker ps | grep compute_virt-launcher | awk '{print $1}'
+8424fcb0b3da
+
+[root@kn1 ~]# docker exec -it 8424fcb0b3da brctl show
+bridge name     bridge id               STP enabled     interfaces
+br1             8000.a697da96cf07       no              eth0
+                                                        vnet0
+[root@kn1 ~]# docker exec -it 8424fcb0b3da ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host
+       valid_lft forever preferred_lft forever
+3: eth0@if12: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue master br1 state UP group default
+    link/ether a6:97:da:96:cf:07 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+    inet6 fe80::a497:daff:fe96:cf07/64 scope link
+       valid_lft forever preferred_lft forever
+4: br1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UP group default
+    link/ether a6:97:da:96:cf:07 brd ff:ff:ff:ff:ff:ff
+    inet 169.254.75.86/32 brd 169.254.75.86 scope global br1
+       valid_lft forever preferred_lft forever
+    inet6 fe80::a497:daff:fe96:cf07/64 scope link
+       valid_lft forever preferred_lft forever
+5: vnet0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc pfifo_fast master br1 state UNKNOWN group default qlen 1000
+    link/ether fe:58:0a:f4:01:08 brd ff:ff:ff:ff:ff:ff
+    inet6 fe80::fc58:aff:fef4:108/64 scope link
+       valid_lft forever preferred_lft forever
+
 ----
