@@ -128,7 +128,7 @@ metadata:
     kubernetes.io/ingress.class: "nginx"
 spec:
   rules:
-  - host: nodejs.example.com
+  - host: nodejs.ingress.virtomation.com
     http:
       paths:
       - backend:

@@ -247,3 +247,48 @@ NAME                          READY     STATUS    RESTARTS   AGE       IP       
 virt-launcher-mongodb-qdpmg   2/2       Running   0          4m        10.244.2.7   kn2.virtomation.com
 virt-launcher-nodejs-5r59c    2/2       Running   0          4m        10.244.1.8   kn1.virtomation.com
 ----
+
+=== install app
+[source,bash]
+----
+vim kubevirt-network-deepdive/ansible/inventory/group_vars/all.yml
+vim kubevirt-network-deepdive/ansible/inventory/hosts.ini
+
+ansible-playbook -i inventory/hosts.ini playbook/main.yml
+----
+
+=== find ingress url
+
+[source,bash]
+----
+$ kubectl get ingress -n nodejs-ex
+NAME      HOSTS                            ADDRESS   PORTS     AGE
+nodejs    nodejs.ingress.virtomation.com             80        22m
+----
+
+[source,bash]
+----
+$ kubectl get service ingress-nginx -n ingress-nginx
+NAME            TYPE       CLUSTER-IP      EXTERNAL-IP   PORT(S)                                      AGE
+ingress-nginx   NodePort   10.110.173.97   <none>        80:30000/TCP,443:30327/TCP,18080:32000/TCP   52m
+----
+
+[source,bash]
+----
+$ kubectl get pod -n ingress-nginx -o wide
+NAME                                        READY     STATUS    RESTARTS   AGE       IP           NODE
+default-http-backend-55c6c69b88-jpl95       1/1       Running   0          53m       10.244.1.3   kn1.virtomation.com
+nginx-ingress-controller-85c8787886-vf5tp   1/1       Running   0          53m       10.244.1.4   kn1.virtomation.com
+----
+
+dnsmasq
+[source,bash]
+----
+[root@dns1 ~]# cat /etc/dnsmasq.d/virtomation.conf
+
+address=/km1.virtomation.com/172.31.50.221
+address=/kn1.virtomation.com/172.31.50.231
+address=/kn2.virtomation.com/172.31.50.232
+
+address=/.ingress.virtomation.com/172.31.50.231
+----
