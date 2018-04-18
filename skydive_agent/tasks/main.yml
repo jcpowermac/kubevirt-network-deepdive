@@ -1,0 +1,9 @@
+---
+- include: docker.yml
+  when: skydive_deployment_mode == "container"
+
+- include: package.yml
+  when: skydive_deployment_mode == "package"
+
+- include: binary.yml
+  when: skydive_deployment_mode == "binary"
