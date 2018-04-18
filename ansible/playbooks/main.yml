@@ -1,14 +1,29 @@
 ---
-
 - name: Configure Mongo
-  hosts: mongodb
+  hosts: all
   gather_facts: True
-  roles:
-    - mongodb
+  tasks:
+    - include_role:
+        name: skydive_agent
+      vars:
+        analyzers: "10.244.1.10:8082"
+        skydive_deployment_mode: binary
 
-- name: Configure Nodejs
-  hosts: nodejs 
-  gather_facts: True
-  roles:
-    - nodejs
+    - include_role:
+        name: mongodb
+      delegate_to: mongodb-1
+      run_once: True
+
+    - include_role:
+        name: nodejs
+      delegate_to: nodejs-1
+      run_once: True
+
+
+
+      #- name: Configure Nodejs
+      #  hosts: nodejs
+      #  gather_facts: True
+      #  roles:
+      #    - nodejs
 

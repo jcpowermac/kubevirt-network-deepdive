@@ -6,7 +6,6 @@
   with_items:
     - mongodb-server
     - python3-pymongo
-  become: True
 
 - name: listen on all interfaces
   lineinfile:
@@ -14,14 +13,12 @@
     regexp: "^(.*)bindIp:(.*)$"
     line: "  bindIp: 0.0.0.0"
     backup: yes
-  become: True
 
 - name: Start and enable mongodb
   systemd:
     name: mongod
     state: started
     enabled: True
-  become: True
 
 - name: Create Admin account
   mongodb_user:
@@ -39,9 +36,3 @@
     login_user: admin
     login_password: admin
     state: present
-  become: True
-
-
-
-
-
