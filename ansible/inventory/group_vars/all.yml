@@ -3,3 +3,5 @@ ansible_python_interpreter: "/usr/bin/python3"
 ansible_user: "fedora"
 ansible_become: True
 ansible_become_method: "sudo"
+
+analyzers: "10.244.1.2:8082"

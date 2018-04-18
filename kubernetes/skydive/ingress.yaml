@@ -1,0 +1,14 @@
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: skydive
+  namespace: skydive
+spec:
+  rules:
+  - host: skydive.ingress.virtomation.com
+    http:
+      paths:
+      - backend:
+          serviceName: skydive-analyzer
+          servicePort: 8082

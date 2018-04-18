@@ -152,10 +152,98 @@ kubectl create ns skydive
 kubectl create -n skydive -f https://raw.githubusercontent.com/skydive-project/skydive/master/contrib/kubernetes/skydive.yaml
 ----
 
+[source,bash]
+----
+$ kubectl get pod -n skydive
+NAME                                READY     STATUS    RESTARTS   AGE
+skydive-agent-5hh8k                 1/1       Running   0          5m
+skydive-agent-c29l7                 1/1       Running   0          5m
+skydive-analyzer-5db567b4bc-m77kq   2/2       Running   0          5m
+----
+
 
 == Ingress, virtual machines
 
 [source,bash]
 ----
 git clone https://github.com/jcpowermac/kubevirt-network-deepdive
+----
+
+== Ingress
+
+[source,bash]
+----
+cd kubevirt-network-deepdive/Kubernetes/ingress
+bash ingress.sh
+----
+
+[source,bash]
+----
+$ kubectl get pod -n ingress-nginx
+NAME                                        READY     STATUS    RESTARTS   AGE
+default-http-backend-55c6c69b88-jpl95       1/1       Running   0          1m
+nginx-ingress-controller-85c8787886-vf5tp   1/1       Running   0          1m
+----
+
+
+== install kubevirt
+
+[source,bash]
+----
+$ kubectl create -f https://github.com/kubevirt/kubevirt/releases/download/v0.4.1/kubevirt.yaml
+serviceaccount "kubevirt-apiserver" created
+...
+customresourcedefinition "offlinevirtualmachines.kubevirt.io" created
+----
+
+[source,bash]
+----
+$ kubectl get pod -n kube-system -l 'kubevirt.io'
+NAME                               READY     STATUS    RESTARTS   AGE
+virt-api-747745669-62cww           1/1       Running   0          4m
+virt-api-747745669-qtn7f           1/1       Running   0          4m
+virt-controller-648945bbcb-dfpwm   0/1       Running   0          4m
+virt-controller-648945bbcb-tppgx   1/1       Running   0          4m
+virt-handler-xlfc2                 1/1       Running   0          4m
+virt-handler-z5lsh                 1/1       Running   0          4m
+----
+
+
+
+
+[source,bash]
+----
+
+$ kubectl create ns nodejs-ex
+namespace "nodejs-ex" created
+
+
+$ kubectl create -f nodejs-ex.yaml -n nodejs-ex
+offlinevirtualmachine "nodejs" created
+offlinevirtualmachine "mongodb" created
+service "mongodb" created
+service "nodejs" created
+ingress "nodejs" created
+
+$ kubectl patch offlinevirtualmachine nodejs --type merge -p '{"spec":{"running":true}}' -n nodejs-ex
+offlinevirtualmachine "nodejs" patched
+
+$ kubectl patch offlinevirtualmachine mongodb --type merge -p '{"spec":{"running":true}}' -n nodejs-ex
+offlinevirtualmachine "mongodb" patched
+
+$ kubectl get ovms -n nodejs-ex
+NAME      AGE
+mongodb   7m
+nodejs    7m
+
+$ kubectl get vms -n nodejs-ex
+NAME      AGE
+mongodb   4m
+nodejs    5m
+
+
+$ kubectl get pod -o wide -n nodejs-ex
+NAME                          READY     STATUS    RESTARTS   AGE       IP           NODE
+virt-launcher-mongodb-qdpmg   2/2       Running   0          4m        10.244.2.7   kn2.virtomation.com
+virt-launcher-nodejs-5r59c    2/2       Running   0          4m        10.244.1.8   kn1.virtomation.com
 ----
