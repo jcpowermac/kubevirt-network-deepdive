@@ -38,7 +38,7 @@ I am rehashing what is available in Kubernetes documentation[https://kubernetes.
 I used to research kubevirt networking.
 
 
-=== Updates, Kubernetes prerequisites and packages
+=== Packages
 
 Add the Kubernetes repository
 [source,bash]
@@ -93,6 +93,8 @@ systemctl enable docker
 
 === Additional prerequisites
 
+https://kubernetes.io/docs/setup/independent/install-kubeadm/#installing-kubeadm-kubelet-and-kubectl
+
 [source,bash]
 ----
 systemctl enable kubelet
@@ -109,16 +111,15 @@ EOF
 sysctl --system
 ----
 
+Temporarily disable selinux so we can run `kubeadm init`
 
-Temporarily Disable selinux
 [source,bash]
 ----
 setenforce 0
 ----
 
-And permanently
-
-If this isn't done if you reboot your node kubernetes won't start and then you will be wondering
+And let's also permanently disable selinux - yes I know. If this isn't done
+once you reboot your node kubernetes won't start and then you will be wondering
 what happened :)
 
 [source,bash]
@@ -138,22 +139,21 @@ SELINUXTYPE=targeted
 EOF
 ----
 
-
-
 == Initialize cluster
 
 https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/
-
 
 Now we are ready to initialize our first kubernetes node.
 [source,bash]
 ----
 
 kubeadm init --pod-network-cidr=10.244.0.0/16
+
+...output...
+
 mkdir -p $HOME/.kube
   sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
   sudo chown $(id -u):$(id -g) $HOME/.kube/config
-
 ----
 
 Install Flannel
@@ -165,12 +165,11 @@ kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/v0.9.1/Documen
 Join additional nodes
 [source,bash]
 ----
-kubeadm join  --token 045c1c.04765c236e1bd8da 172.31.50.221:6443 \
-              --discovery-token-ca-cert-hash \
-              sha256:40a8e6d28843ad69cb195b7a27909c6165fe968aca4d27fff2b25d067a2a4e95
+kubeadm join --token 045c1c.04765c236e1bd8da 172.31.50.221:6443 \
+             --discovery-token-ca-cert-hash sha256:redacted
 ----
 
-Check the node status
+Once all the nodes have been joined check the status.
 [source,bash]
 ----
 $ kubectl get node
@@ -180,7 +179,6 @@ kn1.virtomation.com   Ready     <none>    10m       v1.9.4
 kn2.virtomation.com   Ready     <none>    10m       v1.9.4
 ----
 
-
 == Additional Components
 
 === Kubevirt
@@ -189,11 +187,13 @@ kn2.virtomation.com   Ready     <none>    10m       v1.9.4
 ----
 $ kubectl create -f https://github.com/kubevirt/kubevirt/releases/download/v0.4.1/kubevirt.yaml
 serviceaccount "kubevirt-apiserver" created
-...
+
+... output ...
+
 customresourcedefinition "offlinevirtualmachines.kubevirt.io" created
 ----
 
-Check status
+Check the status of the kubevirt pods
 [source,bash]
 ----
 $ kubectl get pod -n kube-system -l 'kubevirt.io'
@@ -208,13 +208,13 @@ virt-handler-z5lsh                 1/1       Running   0          4m
 
 
 === Skydive
-
 [source,bash]
 ----
 kubectl create ns skydive
 kubectl create -n skydive -f https://raw.githubusercontent.com/skydive-project/skydive/master/contrib/kubernetes/skydive.yaml
 ----
 
+Check the status of Skydive agent and analyzer
 [source,bash]
 ----
 $ kubectl get pod -n skydive
@@ -253,7 +253,6 @@ nginx-ingress-controller-85c8787886-vf5tp   1/1       Running   0          1m
 
 
 = Kubevirt Virtual Machines
-
 == Create objects
 
 Let's create a clean new namespace
@@ -367,8 +366,6 @@ address=/kn2.virtomation.com/172.31.50.232
 address=/.ingress.virtomation.com/172.31.50.231
 ...
 ----
-
-
 
 = Networking in detail
 
@@ -541,3 +538,12 @@ br1             8000.a697da96cf07       no              eth0
     inet6 fe80::858:aff:fef4:108/64 scope link
        valid_lft forever preferred_lft forever
 ----
+
+== VM to VM communication
+
+Basically this works just like any pod would communicate - with some
+added hops.
+
+A packet exits the virtual machine interface to the vnet0 in the pod.
+The path continues from the br1 bridge out the pod's eth0 interface.
+From there your configured CNI-provider takes over.
