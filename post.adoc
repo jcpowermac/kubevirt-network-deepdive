@@ -182,6 +182,9 @@ kn2.virtomation.com   Ready     <none>    10m       v1.9.4
 
 === Kubevirt
 
+The recommended installation method is to use https://github.com/kubevirt/kubevirt-ansible[kubevirt-ansible].
+For this example I don't require storage so just deploying using `kubectl create`.
+
 [source,bash]
 ----
 $ kubectl create -f https://github.com/kubevirt/kubevirt/releases/download/v0.4.1/kubevirt.yaml
@@ -192,7 +195,7 @@ serviceaccount "kubevirt-apiserver" created
 customresourcedefinition "offlinevirtualmachines.kubevirt.io" created
 ----
 
-Check the status of the kubevirt pods
+Let's make sure that all the pods are running.
 [source,bash]
 ----
 $ kubectl get pod -n kube-system -l 'kubevirt.io'
@@ -207,6 +210,12 @@ virt-handler-z5lsh                 1/1       Running   0          4m
 
 
 === Skydive
+
+I have used https://github.com/skydive-project/skydive[Skydive] in the past. It is a great tool
+to understand the topology of software-defined-networking. The only caveat is that
+Skydive doesn't create a complete topology when using Flannel but there
+is still a good picture of what is going on. So with that let's install.
+
 [source,bash]
 ----
 kubectl create ns skydive
@@ -225,23 +234,26 @@ skydive-analyzer-5db567b4bc-m77kq   2/2       Running   0          5m
 
 === ingress-nginx
 
-https://github.com/kubernetes/ingress-nginx/tree/master/deploy
+To provide external access our example NodeJS application we need to an ingress controller.
+For this example we are going to using https://github.com/kubernetes/ingress-nginx/tree/master/deploy[ingress-nginx]
 
-`ingress.sh` is a simple bash script that follows
-the procedue to install ingress-nginx with a couple minor modifications.
+
+I created a simple script `ingress.sh` that follows the installation documentation for ingress-nginx
+with a couple minor modifications:
 
 - Patch the nginx-configuration configmap to enable vts status
-- Add VTS status port to service, Deployment
+- Add an additional containerPort to the deployment and an additional port to the service.
 - Create an ingress to access nginx status page
 
+The script and additional files are available in the github repo listed below.
 [source,bash]
 ----
 git clone https://github.com/jcpowermac/kubevirt-network-deepdive
 cd kubevirt-network-deepdive/kubernetes/ingress
-bash kubevirt-network-deepdive/kubernetes/ingress/ingress.sh
+bash ingress.sh
 ----
 
-Check status
+After the script is complete confirm that ingress-nginx pods are running.
 [source,bash]
 ----
 $ kubectl get pod -n ingress-nginx
@@ -252,6 +264,10 @@ nginx-ingress-controller-85c8787886-vf5tp   1/1       Running   0          1m
 
 
 = Kubevirt Virtual Machines
+
+Now we are at a point where we can deploy our first Kubevirt virtual machines.
+These instances are where we will deploy our simple NodeJS and MongoDB application.
+
 == Create objects
 
 Let's create a clean new namespace
@@ -261,10 +277,14 @@ $ kubectl create ns nodejs-ex
 namespace "nodejs-ex" created
 ----
 
-Create offline virtual machines, mongodb and nodejs service/ingress ???
+The `nodejs-ex.yaml` contains multiple objects.  The definitions for our
+two virtual machines - mongodb and nodejs.  Two Kubernetes `Service` and a one Kubernetes
+Ingress object. These instances will be created as offline virtual machines so after
+this has been deployed we will start them up.
+
 [source,bash]
 ----
-$ kubectl create -f nodejs-ex.yaml -n nodejs-ex
+$ kubectl create -f https://raw.githubusercontent.com/jcpowermac/kubevirt-network-deepdive/master/kubernetes/nodejs-ex.yaml -n nodejs-ex
 offlinevirtualmachine "nodejs" created
 offlinevirtualmachine "mongodb" created
 service "mongodb" created
@@ -300,7 +320,6 @@ mongodb   4m
 nodejs    5m
 ----
 
-
 Where are our virtual machines and what is their ip address?
 [source,bash]
 ----
@@ -309,19 +328,32 @@ NAME                          READY     STATUS    RESTARTS   AGE       IP       
 virt-launcher-mongodb-qdpmg   2/2       Running   0          4m        10.244.2.7   kn2.virtomation.com
 virt-launcher-nodejs-5r59c    2/2       Running   0          4m        10.244.1.8   kn1.virtomation.com
 ----
+To test virtual machine to virtual machine network connectivity I purposely set the
+host where which instance would run by using a `nodeSelector`.
 
 == Install NodeJS Example Application
 
 To quickly deploy our example application ansible playbook and roles
 are included in the repository.  Two inventory files need to be modified
-before executing `anisble-playbook`.
+before executing `ansible-playbook`. Within `all.yml` change the `analyzers` IP address
+to what is listed in the command below.
+[source,bash]
+----
+$ kubectl get endpoints -n skydive
+NAME               ENDPOINTS                                                      AGE
+skydive-analyzer   10.244.1.2:9200,10.244.1.2:12379,10.244.1.2:8082 + 1 more...   18h
+----
+And finally use the IP Addresses from the `kubectl get pod -o wide -n nodejs-ex` command (example above)
+to modify `inventory/hosts.ini`.
 
 [source,bash]
 ----
-vim kubevirt-network-deepdive/ansible/inventory/group_vars/all.yml
-vim kubevirt-network-deepdive/ansible/inventory/hosts.ini
+cd kubevirt-network-deepdive/ansible
+vim inventory/group_vars/all.yml
+vim inventory/hosts.ini
 
 ansible-playbook -i inventory/hosts.ini playbook/main.yml
+... output ...
 ----
 
 === Determine Ingress URL
@@ -334,7 +366,9 @@ NAME      HOSTS                            ADDRESS   PORTS     AGE
 nodejs    nodejs.ingress.virtomation.com             80        22m
 ----
 
-Next what are the NodePorts?  For this example port 30000 will be used.
+What are the NodePorts? When deploying ingress-nginx without the modified Service these
+NodePorts are random.  For this example they were switched to static for http and http-mgmt.
+
 [source,bash]
 ----
 $ kubectl get service ingress-nginx -n ingress-nginx
@@ -358,16 +392,25 @@ an A record.
 [source,bash]
 ----
 [root@dns1 ~]# cat /etc/dnsmasq.d/virtomation.conf
-...
+... output ...
 address=/km1.virtomation.com/172.31.50.221
 address=/kn1.virtomation.com/172.31.50.231
 address=/kn2.virtomation.com/172.31.50.232
+
+# Needed for nginx-ingress
 address=/.ingress.virtomation.com/172.31.50.231
-...
+... output ...
 ----
 
-=== Curl
+[source,bash]
+----
+systemctl restart dnsmasq
+----
 
+=== Testing our application
+
+This application uses MongoDB to store the views of the website.  Listing the `count-value`
+shows that the database is connected and networking is functioning correctly.
 [source,bash]
 ----
 $ curl http://nodejs.ingress.virtomation.com:30000/
@@ -386,6 +429,8 @@ $ curl http://nodejs.ingress.virtomation.com:30000/
 
 = Kubevirt Networking
 
+Now that we shown that kubernetes, kubevirt, ingress-nginx and flannel work together how is it accomplished?
+First let's go over what is going on in kubevirt specifically.
 
 
 image::diagram.png[Kubevirt networking]
