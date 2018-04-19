@@ -435,10 +435,12 @@ First let's go over what is going on in kubevirt specifically.
 
 image::diagram.png[Kubevirt networking]
 
+== virt-launcher - https://github.com/kubevirt/kubevirt/tree/master/pkg/virt-launcher/virtwrap[virtwrap]
 
-== virt-launcher -https://github.com/kubevirt/kubevirt/tree/master/pkg/virt-launcher/virtwrap[virtwrap]
+virt-launcher is the pod that runs the necessary components instantiate and run a virtual machine.
+We are only going to concentrate on the network portion in this post.
 
-=== https://github.com/kubevirt/kubevirt/blob/master/pkg/virt-launcher/virtwrap/manager.go[manager]
+=== https://github.com/kubevirt/kubevirt/blob/master/pkg/virt-launcher/virtwrap/manager.go[virtwrap manager]
 
 Before the virtual machine is started the `preStartHook` will run `SetupPodNetwork`.
 
@@ -448,16 +450,18 @@ This function calls two functions that are detailed below `discoverPodNetworkInt
 
 ==== https://github.com/kubevirt/kubevirt/blob/master/pkg/virt-launcher/virtwrap/network/network.go[discoverPodNetworkInterface]
 
+This function gathers the following information about the pod interface:
 
-- Pod interface IP Address
-- Pod interface routes
-- Pod interface gateway
-- Pod interface MAC address
+- IP Address
+- Routes
+- Gateway
+- MAC address
+
+This is stored for later use in configuring DHCP.
 
 ==== https://github.com/kubevirt/kubevirt/blob/master/pkg/virt-launcher/virtwrap/network/network.go[preparePodNetworkInterfaces]
 
-The pod interface is `eth0`. The bridge is defined as
-`br1`
+Once the current details of the pod interface have been stored following operations are performed:
 
 - Delete the IP address from the pod interface
 - Set the pod interface down
@@ -466,10 +470,11 @@ The pod interface is `eth0`. The bridge is defined as
 - Create the bridge
 - Add the pod interface to the bridge
 
+This will provide libvirt a bridge to use for the virtual machine that will be created.
 
 ==== StartDHCP -> DHCPServer -> https://github.com/kubevirt/kubevirt/blob/master/pkg/virt-launcher/virtwrap/network/dhcp/dhcp.go[SingleClientDHCPServer]
-    - This DHCP server only provides a single address to a client in this case the virtual machine that will be started.  The network details - the IP address, gateway, routes, DNS servers and suffixes are taken from the pod.
 
+This DHCP server only provides a single address to a client in this case the virtual machine that will be started.  The network details - the IP address, gateway, routes, DNS servers and suffixes are taken from the pod which will be served to the virtual machine.
 
 = Networking in detail
 
