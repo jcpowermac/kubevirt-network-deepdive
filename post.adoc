@@ -140,12 +140,11 @@ EOF
 
 == Initialize cluster
 
-https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/
 
-Now we are ready to initialize our first kubernetes node.
+
+Now we are ready to https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/[create our cluster] starting with the first and only master.
 [source,bash]
 ----
-
 kubeadm init --pod-network-cidr=10.244.0.0/16
 
 ...output...
@@ -155,13 +154,15 @@ mkdir -p $HOME/.kube
   sudo chown $(id -u):$(id -g) $HOME/.kube/config
 ----
 
-Install Flannel
+There are multiple CNI providers in this example environment just going to use Flannel since
+its simple to deploy and configure.
+
 [source,bash]
 ----
 kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/v0.9.1/Documentation/kube-flannel.yml
 ----
 
-Join additional nodes
+After Flannel is deployed join the nodes to the cluster.
 [source,bash]
 ----
 kubeadm join --token 045c1c.04765c236e1bd8da 172.31.50.221:6443 \
@@ -237,12 +238,11 @@ skydive-analyzer-5db567b4bc-m77kq   2/2       Running   0          5m
 To provide external access our example NodeJS application we need to an ingress controller.
 For this example we are going to using https://github.com/kubernetes/ingress-nginx/tree/master/deploy[ingress-nginx]
 
-
 I created a simple script `ingress.sh` that follows the installation documentation for ingress-nginx
 with a couple minor modifications:
 
-- Patch the nginx-configuration configmap to enable vts status
-- Add an additional containerPort to the deployment and an additional port to the service.
+- Patch the `nginx-configuration` ConfigMap to enable vts status
+- Add an additional `containerPort` to the deployment and an additional port to the service.
 - Create an ingress to access nginx status page
 
 The script and additional files are available in the github repo listed below.
@@ -278,8 +278,8 @@ namespace "nodejs-ex" created
 ----
 
 The `nodejs-ex.yaml` contains multiple objects.  The definitions for our
-two virtual machines - mongodb and nodejs.  Two Kubernetes `Service` and a one Kubernetes
-Ingress object. These instances will be created as offline virtual machines so after
+two virtual machines - mongodb and nodejs.  Two Kubernetes `Services` and a one Kubernetes
+`Ingress` object. These instances will be created as offline virtual machines so after
 this has been deployed we will start them up.
 
 [source,bash]
@@ -320,7 +320,7 @@ mongodb   4m
 nodejs    5m
 ----
 
-Where are our virtual machines and what is their ip address?
+Where is our virtual machines and what is their IP address?
 [source,bash]
 ----
 $ kubectl get pod -o wide -n nodejs-ex
@@ -358,7 +358,8 @@ ansible-playbook -i inventory/hosts.ini playbook/main.yml
 
 === Determine Ingress URL
 
-First let's find the host.
+First let's find the host.  This is defined within the `Ingress` object.
+In this case it is `nodejs.ingress.virtomation.com`.
 [source,bash]
 ----
 $ kubectl get ingress -n nodejs-ex
@@ -367,7 +368,8 @@ nodejs    nodejs.ingress.virtomation.com             80        22m
 ----
 
 What are the NodePorts? When deploying ingress-nginx without the modified Service these
-NodePorts are random.  For this example they were switched to static for http and http-mgmt.
+NodePorts are random.  For this example they were switched to static for http (30000)
+and http-mgmt (32000).
 
 [source,bash]
 ----
@@ -401,7 +403,7 @@ address=/kn2.virtomation.com/172.31.50.232
 address=/.ingress.virtomation.com/172.31.50.231
 ... output ...
 ----
-
+Restart dnsmasq for the new config
 [source,bash]
 ----
 systemctl restart dnsmasq
@@ -477,6 +479,8 @@ This will provide libvirt a bridge to use for the virtual machine that will be c
 This DHCP server only provides a single address to a client in this case the virtual machine that will be started.  The network details - the IP address, gateway, routes, DNS servers and suffixes are taken from the pod which will be served to the virtual machine.
 
 = Networking in detail
+
+Now that we have a clearier picture of kubevirt networking we will continue with the kubernetes objects, pod and virtual machine network details.  Finishing up with two scenarios: virtual machine to virtual machine communication and ingress to virtual machine.
 
 https://thenewstack.io/hackers-guide-kubernetes-networking/
 
