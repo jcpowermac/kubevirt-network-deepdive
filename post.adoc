@@ -34,9 +34,8 @@ will be installed.
 
 == Kubernetes
 
-I am rehashing what is available in Kubernetes documentation[https://kubernetes.io/docs/setup/independent/install-kubeadm/]  just to make it easier to follow along and provide an identical environment that
+I am rehashing what is available in https://kubernetes.io/docs/setup/independent/install-kubeadm/[Kubernetes documentation] just to make it easier to follow along and provide an identical environment that
 I used to research kubevirt networking.
-
 
 === Packages
 
@@ -367,7 +366,44 @@ address=/.ingress.virtomation.com/172.31.50.231
 ...
 ----
 
+=== Curl
+
+[source,bash]
+----
+$ curl http://nodejs.ingress.virtomation.com:30000/
+<!doctype html>
+<html lang="en">
+
+...output...
+
+<p>Page view count:
+<span class="code" id="count-value">7</span>
+</p>
+
+...output...
+----
+
+
+= Kubevirt Networking
+
+
+
+image::diagram.png[Kubevirt networking]
+
+
+== virt-launcher
+
+
+
+
 = Networking in detail
+
+https://thenewstack.io/hackers-guide-kubernetes-networking/
+
+https://events.static.linuxfound.org/sites/events/files/slides/2016%20-%20Linux%20Networking%20explained_0.pdf
+
+bridge fdb show br cni0
+
 
 == Kubernetes-level
 
