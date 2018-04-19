@@ -436,7 +436,33 @@ First let's go over what is going on in kubevirt specifically.
 image::diagram.png[Kubevirt networking]
 
 
-== virt-launcher
+== virt-launcher - virtwrap
+
+=== manager
+
+https://github.com/kubevirt/kubevirt/blob/master/pkg/virt-launcher/virtwrap/network/network.go
+https://github.com/kubevirt/kubevirt/blob/master/pkg/virt-launcher/virtwrap/network/dhcp/dhcp.go
+https://github.com/kubevirt/kubevirt/blob/master/pkg/virt-launcher/virtwrap/manager.go#L95
+
+
+=== SetupPodNetwork-> SetupDefaultPodNetwork
+
+- Get interface
+- discoverPodNetworkInterface
+- preparePodNetworkInterfaces
+- Start DHCP
+
+=== preparePodNetworkInterfaces
+
+The pod interface is `eth0`. The bridge is defined as
+`br1`
+
+- Delete the IP address from the pod interface
+- Set the pod interface down
+- Change the pod interface MAC address
+- Set the pod interface up
+- Create the bridge
+- Add the pod interface to the bridge
 
 
 
@@ -621,6 +647,10 @@ br1             8000.a697da96cf07       no              eth0
 ----
 
 == VM to VM communication
+
+
+image::kubevirt-skydive-vm-to-vm.png[vm-to-vm]
+
 
 Basically this works just like any pod would communicate - with some
 added hops.
