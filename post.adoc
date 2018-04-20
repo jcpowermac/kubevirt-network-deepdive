@@ -729,15 +729,46 @@ Apr 18 20:07:37 nodejs.localdomain node[4303]: Connected to MongoDB at: mongodb:
 
 == Ingress to VM communication
 
+image::skydive-ingress-path.png[skydive-ingress-path]
 
+[source,bash]
+----
+[root@kn1 ~]# ss -tanp | grep 30000
+LISTEN     0      128         :::30000                   :::*                   users:(("kube-proxy",pid=6534,fd=13))
+----
+
+[source,bash]
+----
+[root@kn1 ~]# iptables -n -L -t nat | grep 30000
+KUBE-MARK-MASQ  tcp  --  0.0.0.0/0            0.0.0.0/0            /* ingress-nginx/ingress-nginx:http */ tcp dpt:30000
+KUBE-SVC-REQ4FPVT7WYF4VLA  tcp  --  0.0.0.0/0            0.0.0.0/0            /* ingress-nginx/ingress-nginx:http */ tcp dpt:30000
+----
+
+[source,bash]
+----
+[root@kn1 ~]# iptables -n -L -t nat | grep 10.110.173.97
+KUBE-MARK-MASQ  tcp  -- !10.244.0.0/16        10.110.173.97        /* ingress-nginx/ingress-nginx:https cluster IP */ tcp dpt:443
+KUBE-SVC-4E7KSV2ABIFJRAUZ  tcp  --  0.0.0.0/0            10.110.173.97        /* ingress-nginx/ingress-nginx:https cluster IP */ tcp dpt:443
+KUBE-MARK-MASQ  tcp  -- !10.244.0.0/16        10.110.173.97        /* ingress-nginx/ingress-nginx:http-mgmt cluster IP */ tcp dpt:18080
+KUBE-SVC-QR2HZHPPZLNESSM7  tcp  --  0.0.0.0/0            10.110.173.97        /* ingress-nginx/ingress-nginx:http-mgmt cluster IP */ tcp dpt:18080
+KUBE-MARK-MASQ  tcp  -- !10.244.0.0/16        10.110.173.97        /* ingress-nginx/ingress-nginx:http cluster IP */ tcp dpt:80
+KUBE-SVC-REQ4FPVT7WYF4VLA  tcp  --  0.0.0.0/0            10.110.173.97        /* ingress-nginx/ingress-nginx:http cluster IP */ tcp dpt:80
+----
+
+[source,bash]
+----
+[root@kn1 ~]# ip r
+...output...
+10.244.1.0/24 dev cni0 proto kernel scope link src 10.244.1.1
+...output...
+----
 
 === Connectivity Tests
-
-
 
 ==== Nginx Vhost Traffic Status
 
 The image below shows the requests that Nginx is receiving for `nodejs.ingress.virtomation.com`.
+
 image::nginx-vts.png[nginx-vts]
 
 ==== Service NodePort to Nginx Pod
