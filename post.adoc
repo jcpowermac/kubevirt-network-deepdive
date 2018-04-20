@@ -480,29 +480,20 @@ This DHCP server only provides a single address to a client in this case the vir
 The network details - the IP address, gateway, routes, DNS servers and suffixes are taken from the pod which
 will be served to the virtual machine.
 
-You can see `virt-launcher` has UDP port 67 open on the `br1` interface to serve DHCP to the virtual machine.
-
-[source,bash]
-----
-$ kubectl exec -n nodejs-ex -c compute virt-launcher-nodejs-5r59c -- ss -tuapn
-Netid  State    Recv-Q   Send-Q      Local Address:Port      Peer Address:Port
-udp    UNCONN   0        0             0.0.0.0%br1:67             0.0.0.0:*      users:(("virt-launcher",pid=10,fd=12))
-----
 
 = Networking in detail
 
-Now that we have a clearier picture of kubevirt networking we will continue with the kubernetes objects, pod and virtual machine network details.  Finishing up with two scenarios: virtual machine to virtual machine communication and ingress to virtual machine.
-
-https://thenewstack.io/hackers-guide-kubernetes-networking/
-
-https://events.static.linuxfound.org/sites/events/files/slides/2016%20-%20Linux%20Networking%20explained_0.pdf
-
-bridge fdb show br cni0
-
+Now that we have a clearier picture of kubevirt networking we will continue with details regarding
+kubernetes objects, host, pod and virtual machine networking components.  Then we will finish up with two scenarios: virtual machine to virtual machine communication and ingress to virtual machine.
 
 == Kubernetes-level
 
 === services
+
+There are two services defined in the manifest that was deployed above.  Once for
+mongodb and nodejs. This allows us to use the hostname `mongodb` to connect to MongoDB.
+Review https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/[DNS for Services and Pods] for additional information.
+
 
 [source,bash]
 ----
@@ -514,7 +505,16 @@ nodejs    ClusterIP   10.110.233.114   <none>        8080/TCP    3h
 
 === endpoints
 
-Below are the endpoints for the virtual machines that were created above.
+The endpoints below were automatically created because there was a selector e.g.
+[source,yaml]
+----
+spec:
+  selector:
+    kubevirt.io: virt-launcher
+    kubevirt.io/domain: nodejs
+----
+defined in the Service object.
+
 [source,bash]
 ----
 $ kubectl get endpoints -n nodejs-ex
@@ -525,6 +525,9 @@ nodejs    10.244.1.8:8080    1h
 
 === ingress
 
+Also defined in the manifest was the ingress object.  This will allow us to contact
+the NodeJS example application using a URL.
+
 [source,bash]
 ----
 $ kubectl get ingress -n nodejs-ex
@@ -534,9 +537,77 @@ nodejs    nodejs.ingress.virtomation.com             80        3h
 
 == Host-level
 
+=== interfaces
+
+A few important interfaces to note.  The flannel interface is type `vxlan` for connectivity between hosts.
+I removed from the `ip a` output the veth interfaces but the details are shown further below with `bridge link show`.
+[source,bash]
+----
+[root@kn1 ~]# ip a
+...output...
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 52:54:00:97:a6:ee brd ff:ff:ff:ff:ff:ff
+    inet 172.31.50.231/24 brd 172.31.50.255 scope global eth0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::5054:ff:fe97:a6ee/64 scope link
+       valid_lft forever preferred_lft forever
+...output...
+4: flannel.1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UNKNOWN
+    link/ether ce:4e:fb:41:1d:af brd ff:ff:ff:ff:ff:ff
+    inet 10.244.1.0/32 scope global flannel.1
+       valid_lft forever preferred_lft forever
+    inet6 fe80::cc4e:fbff:fe41:1daf/64 scope link
+       valid_lft forever preferred_lft forever
+5: cni0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UP qlen 1000
+    link/ether 0a:58:0a:f4:01:01 brd ff:ff:ff:ff:ff:ff
+    inet 10.244.1.1/24 scope global cni0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::341b:eeff:fe06:7ec/64 scope link
+       valid_lft forever preferred_lft forever
+...output...
+----
+
+`cni0` is a bridge where one side of the veth interface pair is attached.
+
+[source,bash]
+----
+[root@kn1 ~]# bridge link show
+6: vethb4424886 state UP @docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master cni0 state forwarding priority 32 cost 2
+7: veth1657737b state UP @docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master cni0 state forwarding priority 32 cost 2
+8: vethdfd32c87 state UP @docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master cni0 state forwarding priority 32 cost 2
+9: vethed0f8c9a state UP @docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master cni0 state forwarding priority 32 cost 2
+10: veth05e4e005 state UP @docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master cni0 state forwarding priority 32 cost 2
+11: veth25933a54 state UP @docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master cni0 state forwarding priority 32 cost 2
+12: vethe3d701e7 state UP @docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master cni0 state forwarding priority 32 cost 2
+----
+
+=== routes
+
+The pod network subnet is `10.244.0.0/16` and broken up per host:
+
+- km1 - `10.244.0.0/24`
+- kn1 - `10.244.1.0/24`
+- kn2 - `10.244.2.0/24`
+
+So the table will route the packets to correct interface.
+
+[source,bash]
+----
+[root@kn1 ~]# ip r
+default via 172.31.50.1 dev eth0
+10.244.0.0/24 via 10.244.0.0 dev flannel.1 onlink
+10.244.1.0/24 dev cni0 proto kernel scope link src 10.244.1.1
+10.244.2.0/24 via 10.244.2.0 dev flannel.1 onlink
+172.17.0.0/16 dev docker0 proto kernel scope link src 172.17.0.1
+172.31.50.0/24 dev eth0 proto kernel scope link src 172.31.50.231
+----
+
 === iptables
 
-https://kubernetes.io/docs/tasks/debug-application-cluster/debug-service/#is-kube-proxy-writing-iptables-rules
+To also support kubernetes services kube-proxy writes iptables rules for those services.
+In the output below you can see our mongodb and nodejs services with destination NAT rules defined.
+For more information regarding iptables and services refer to https://kubernetes.io/docs/tasks/debug-application-cluster/debug-service/#is-kube-proxy-writing-iptables-rules[debug-service] in the kubernetes documentation.
+
 [source,bash]
 ----
 [root@kn1 ~]# iptables -n -L -t nat | grep nodejs-ex
@@ -552,91 +623,22 @@ KUBE-SEP-JOPA2J4R76O5OVH5  all  --  0.0.0.0/0            0.0.0.0/0            /*
 KUBE-SEP-QD4L7MQHCIVOWZAO  all  --  0.0.0.0/0            0.0.0.0/0            /* nodejs-ex/mongodb: */
 ----
 
-=== routes
-[source,bash]
-----
-[root@kn1 ~]# ip r
-default via 172.31.50.1 dev eth0
-10.244.0.0/24 via 10.244.0.0 dev flannel.1 onlink
-10.244.1.0/24 dev cni0 proto kernel scope link src 10.244.1.1
-10.244.2.0/24 via 10.244.2.0 dev flannel.1 onlink
-172.17.0.0/16 dev docker0 proto kernel scope link src 172.17.0.1
-172.31.50.0/24 dev eth0 proto kernel scope link src 172.31.50.231
-----
-
-=== cni0 bridge ports
-[source,bash]
-----
-[root@kn1 ~]# bridge link show
-6: vethb4424886 state UP @docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master cni0 state forwarding priority 32 cost 2
-7: veth1657737b state UP @docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master cni0 state forwarding priority 32 cost 2
-8: vethdfd32c87 state UP @docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master cni0 state forwarding priority 32 cost 2
-9: vethed0f8c9a state UP @docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master cni0 state forwarding priority 32 cost 2
-10: veth05e4e005 state UP @docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master cni0 state forwarding priority 32 cost 2
-11: veth25933a54 state UP @docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master cni0 state forwarding priority 32 cost 2
-12: vethe3d701e7 state UP @docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master cni0 state forwarding priority 32 cost 2
-
-----
-
-=== interfaces
-[source,bash]
-----
-[root@kn1 ~]# ip l
-1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT qlen 1
-    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
-2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP mode DEFAULT qlen 1000
-    link/ether 52:54:00:97:a6:ee brd ff:ff:ff:ff:ff:ff
-3: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN mode DEFAULT
-    link/ether 02:42:44:83:13:a4 brd ff:ff:ff:ff:ff:ff
-4: flannel.1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UNKNOWN mode DEFAULT
-    link/ether ce:4e:fb:41:1d:af brd ff:ff:ff:ff:ff:ff
-5: cni0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UP mode DEFAULT qlen 1000
-    link/ether 0a:58:0a:f4:01:01 brd ff:ff:ff:ff:ff:ff
-6: vethb4424886@if3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue master cni0 state UP mode DEFAULT
-    link/ether 96:80:89:97:86:76 brd ff:ff:ff:ff:ff:ff link-netnsid 0
-7: veth1657737b@if3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue master cni0 state UP mode DEFAULT
-    link/ether de:fc:0d:0c:91:31 brd ff:ff:ff:ff:ff:ff link-netnsid 1
-8: vethdfd32c87@if3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue master cni0 state UP mode DEFAULT
-    link/ether b6:6c:cf:59:89:2d brd ff:ff:ff:ff:ff:ff link-netnsid 2
-9: vethed0f8c9a@if3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue master cni0 state UP mode DEFAULT
-    link/ether 32:02:6d:0a:24:17 brd ff:ff:ff:ff:ff:ff link-netnsid 3
-10: veth05e4e005@if3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue master cni0 state UP mode DEFAULT
-    link/ether b6:94:64:09:7c:57 brd ff:ff:ff:ff:ff:ff link-netnsid 4
-11: veth25933a54@if3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue master cni0 state UP mode DEFAULT
-    link/ether 82:8a:63:32:8c:0a brd ff:ff:ff:ff:ff:ff link-netnsid 5
-12: vethe3d701e7@if3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue master cni0 state UP mode DEFAULT
-    link/ether 96:9a:ac:ec:d1:02 brd ff:ff:ff:ff:ff:ff link-netnsid 6
-----
-
 == Pod-level
 
-=== bridge
-
-
-[source,bash]
-----
-$ kubectl exec -n nodejs-ex -c compute virt-launcher-nodejs-5r59c -- bridge link show
-
-3: eth0 state UP @if12: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master br1 state forwarding priority 32 cost 2
-5: vnet0 state UNKNOWN : <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master br1 state forwarding priority 32 cost 100
-----
-
 === interfaces
 
-NOTE:
-eth0 has no address
-br1 has 169 address
+The bridge `br1` is the main focus in the pod level. It contains the `eth0` and `vnet0` ports.
+`eth0` becomes the uplink to the bridge which is the other side of the veth pair which is a port on the host's `cni0`
+bridge.
+
+IMPORTANT: Since `eth0` has no IP address and `br1` is in the self-assigned range the pod has no network
+access. There is also no routes in the pod. This can be resolved for troubleshooting by creating a veth pair and
+appropriate routes.
 
 [source,bash]
 ----
 $ kubectl exec -n nodejs-ex -c compute virt-launcher-nodejs-5r59c -- ip a
-
-1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1
-    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
-    inet 127.0.0.1/8 scope host lo
-       valid_lft forever preferred_lft forever
-    inet6 ::1/128 scope host
-       valid_lft forever preferred_lft forever
+...output...
 3: eth0@if12: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue master br1 state UP group default
     link/ether a6:97:da:96:cf:07 brd ff:ff:ff:ff:ff:ff link-netnsid 0
     inet6 fe80::a497:daff:fe96:cf07/64 scope link
@@ -653,24 +655,63 @@ $ kubectl exec -n nodejs-ex -c compute virt-launcher-nodejs-5r59c -- ip a
        valid_lft forever preferred_lft forever
 ----
 
+Showing the bridge `br1` member ports.
+[source,bash]
+----
+$ kubectl exec -n nodejs-ex -c compute virt-launcher-nodejs-5r59c -- bridge link show
+3: eth0 state UP @if12: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master br1 state forwarding priority 32 cost 2
+5: vnet0 state UNKNOWN : <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master br1 state forwarding priority 32 cost 100
+----
+
+=== DHCP
+The virtual machine network is configured by DHCP. You can see `virt-launcher` has UDP port 67 open on
+the `br1` interface to serve DHCP to the virtual machine.
+
+[source,bash]
+----
+$ kubectl exec -n nodejs-ex -c compute virt-launcher-nodejs-5r59c -- ss -tuapn
+Netid  State    Recv-Q   Send-Q      Local Address:Port      Peer Address:Port
+udp    UNCONN   0        0             0.0.0.0%br1:67             0.0.0.0:*      users:(("virt-launcher",pid=10,fd=12))
+----
+
+=== libvirt
+
+With `virsh domiflist` we can also see that the interface is a port on the `br1` bridge.
+[source,bash]
+----
+$ kubectl exec -n nodejs-ex -c compute virt-launcher-nodejs-5r59c -- virsh domiflist nodejs-ex_nodejs
+Interface  Type       Source     Model       MAC
+vnet0      bridge     br1        e1000       0a:58:0a:f4:01:08
+----
+
 == VM-level
 
 === interfaces
+
+Fortunately the vm interfaces are fairly boring.  Just the single interface that has been assigned the
+original pod ip address.
 [source,bash]
 ----
 [fedora@nodejs ~]$ ip a
-1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
-    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
-    inet 127.0.0.1/8 scope host lo
-       valid_lft forever preferred_lft forever
-    inet6 ::1/128 scope host
-       valid_lft forever preferred_lft forever
+...output...
 2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
     link/ether 0a:58:0a:f4:01:08 brd ff:ff:ff:ff:ff:ff
     inet 10.244.1.8/24 brd 10.244.1.255 scope global dynamic eth0
        valid_lft 86299761sec preferred_lft 86299761sec
     inet6 fe80::858:aff:fef4:108/64 scope link
        valid_lft forever preferred_lft forever
+----
+
+=== DNS
+
+Just quickly wanted to cat the `/etc/resolv.conf` file to show that DNS is properly configured so
+that kube-dns will be properly queried.
+[source,bash]
+----
+[fedora@nodejs ~]$ cat /etc/resolv.conf
+; generated by /usr/sbin/dhclient-script
+search nodejs-ex.svc.cluster.local. svc.cluster.local. cluster.local.
+nameserver 10.96.0.10
 ----
 
 == VM to VM communication
