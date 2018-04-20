@@ -636,8 +636,11 @@ The bridge `br1` is the main focus in the pod level. It contains the `eth0` and 
 bridge.
 
 IMPORTANT: Since `eth0` has no IP address and `br1` is in the self-assigned range the pod has no network
-access. There are also no routes in the pod. This can be resolved for troubleshooting by creating a veth pair and
-appropriate routes.
+access. There are also no routes in the pod. This can be resolved for troubleshooting by creating a veth pair,
+adding one of the interfaces to the bridge and assigning an IP address in the pod subnet for the host. Routes are
+also required to be added. This is performed for running skydive in the pod see
+https://github.com/jcpowermac/kubevirt-network-deepdive/blob/master/kubernetes/skydive/skydive.sh[skydive.sh]
+for more details.
 
 [source,bash]
 ----
