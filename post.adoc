@@ -505,7 +505,7 @@ nodejs    ClusterIP   10.110.233.114   <none>        8080/TCP    3h
 
 === endpoints
 
-The endpoints below were automatically created because there was a selector e.g.
+The endpoints below were automatically created because there was a selector
 [source,yaml]
 ----
 spec:
@@ -632,7 +632,7 @@ The bridge `br1` is the main focus in the pod level. It contains the `eth0` and 
 bridge.
 
 IMPORTANT: Since `eth0` has no IP address and `br1` is in the self-assigned range the pod has no network
-access. There is also no routes in the pod. This can be resolved for troubleshooting by creating a veth pair and
+access. There are also no routes in the pod. This can be resolved for troubleshooting by creating a veth pair and
 appropriate routes.
 
 [source,bash]
@@ -676,7 +676,7 @@ udp    UNCONN   0        0             0.0.0.0%br1:67             0.0.0.0:*     
 
 === libvirt
 
-With `virsh domiflist` we can also see that the interface is a port on the `br1` bridge.
+With `virsh domiflist` we can also see that the `vnet0` interface is a port on the `br1` bridge.
 [source,bash]
 ----
 $ kubectl exec -n nodejs-ex -c compute virt-launcher-nodejs-5r59c -- virsh domiflist nodejs-ex_nodejs
@@ -873,5 +873,10 @@ ingress-nginx   nginx-ingress-controller-85c8787886-vf5tp     1/1       Running 
 
 image::skydive-ingress-vm.png[ingress-vm]
 
+= Final Thoughts
+
+We have went through quite a bit in this deep dive from installation, kubevirt specific
+networking details and kubernetes, host, pod and virtual machine level configurations.
+Finishing up with the packet flow between virtual machine to virtual machine and ingress to virtual machine.
 
 
