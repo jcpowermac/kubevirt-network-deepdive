@@ -476,7 +476,18 @@ This will provide libvirt a bridge to use for the virtual machine that will be c
 
 ==== StartDHCP -> DHCPServer -> https://github.com/kubevirt/kubevirt/blob/master/pkg/virt-launcher/virtwrap/network/dhcp/dhcp.go[SingleClientDHCPServer]
 
-This DHCP server only provides a single address to a client in this case the virtual machine that will be started.  The network details - the IP address, gateway, routes, DNS servers and suffixes are taken from the pod which will be served to the virtual machine.
+This DHCP server only provides a single address to a client in this case the virtual machine that will be started.
+The network details - the IP address, gateway, routes, DNS servers and suffixes are taken from the pod which
+will be served to the virtual machine.
+
+You can see `virt-launcher` has UDP port 67 open on the `br1` interface to serve DHCP to the virtual machine.
+
+[source,bash]
+----
+$ kubectl exec -n nodejs-ex -c compute virt-launcher-nodejs-5r59c -- ss -tuapn
+Netid  State    Recv-Q   Send-Q      Local Address:Port      Peer Address:Port
+udp    UNCONN   0        0             0.0.0.0%br1:67             0.0.0.0:*      users:(("virt-launcher",pid=10,fd=12))
+----
 
 = Networking in detail
 
@@ -553,19 +564,18 @@ default via 172.31.50.1 dev eth0
 172.31.50.0/24 dev eth0 proto kernel scope link src 172.31.50.231
 ----
 
-=== bridge
+=== cni0 bridge ports
 [source,bash]
 ----
-[root@kn1 ~]# brctl show
-bridge name     bridge id               STP enabled     interfaces
-cni0            8000.0a580af40101       no              veth05e4e005
-                                                        veth1657737b
-                                                        veth25933a54
-                                                        vethb4424886
-                                                        vethdfd32c87
-                                                        vethe3d701e7
-                                                        vethed0f8c9a
-docker0         8000.0242448313a4       no
+[root@kn1 ~]# bridge link show
+6: vethb4424886 state UP @docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master cni0 state forwarding priority 32 cost 2
+7: veth1657737b state UP @docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master cni0 state forwarding priority 32 cost 2
+8: vethdfd32c87 state UP @docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master cni0 state forwarding priority 32 cost 2
+9: vethed0f8c9a state UP @docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master cni0 state forwarding priority 32 cost 2
+10: veth05e4e005 state UP @docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master cni0 state forwarding priority 32 cost 2
+11: veth25933a54 state UP @docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master cni0 state forwarding priority 32 cost 2
+12: vethe3d701e7 state UP @docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master cni0 state forwarding priority 32 cost 2
+
 ----
 
 === interfaces
@@ -602,21 +612,25 @@ docker0         8000.0242448313a4       no
 
 === bridge
 
+
 [source,bash]
 ----
-[root@kn1 ~]# docker ps | grep compute_virt-launcher | awk '{print $1}'
-8424fcb0b3da
+$ kubectl exec -n nodejs-ex -c compute virt-launcher-nodejs-5r59c -- bridge link show
 
-[root@kn1 ~]# docker exec -it 8424fcb0b3da brctl show
-bridge name     bridge id               STP enabled     interfaces
-br1             8000.a697da96cf07       no              eth0
-                                                        vnet0
+3: eth0 state UP @if12: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master br1 state forwarding priority 32 cost 2
+5: vnet0 state UNKNOWN : <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master br1 state forwarding priority 32 cost 100
 ----
 
 === interfaces
+
+NOTE:
+eth0 has no address
+br1 has 169 address
+
 [source,bash]
 ----
-[root@kn1 ~]# docker exec -it 8424fcb0b3da ip a
+$ kubectl exec -n nodejs-ex -c compute virt-launcher-nodejs-5r59c -- ip a
+
 1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1
     link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
     inet 127.0.0.1/8 scope host lo
@@ -628,7 +642,7 @@ br1             8000.a697da96cf07       no              eth0
     inet6 fe80::a497:daff:fe96:cf07/64 scope link
        valid_lft forever preferred_lft forever
 4: br1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UP group default
-    link/ether a6:97:da:96:cf:07 brd ff:ff:ff:ff:ff:ff
+    link/ether 32:8a:f5:59:10:02 brd ff:ff:ff:ff:ff:ff
     inet 169.254.75.86/32 brd 169.254.75.86 scope global br1
        valid_lft forever preferred_lft forever
     inet6 fe80::a497:daff:fe96:cf07/64 scope link
@@ -661,13 +675,66 @@ br1             8000.a697da96cf07       no              eth0
 
 == VM to VM communication
 
+The virtual machines are on differnet hosts.  This was done purposely to show
+that connectivity between virtual machine and hosts. Here we finally get to use
+Skydive.  The real-time topology below along with arrows annotate the flow
+of packets between the host, pod and virtual machine network devices.
 
 image::kubevirt-skydive-vm-to-vm.png[vm-to-vm]
 
+=== Connectivity Tests
 
-Basically this works just like any pod would communicate - with some
-added hops.
+To confirm connectivity we are going to do a few things.  First check for DNS
+resolution for the mongodb service.  Next look a established connection to
+MongoDB and finally check the NodeJS logs looking for confirmation of database
+connection.
 
-A packet exits the virtual machine interface to the vnet0 in the pod.
-The path continues from the br1 bridge out the pod's eth0 interface.
-From there your configured CNI-provider takes over.
+==== DNS resolution
+
+Service-based DNS resolution is an important feature of Kubernetes. Since
+dig,host or nslookup are not installed in our virtual machine a quick python script
+fills in.  This output below shows that the mongodb name is available for
+resolution.
+
+[source,bash]
+----
+[fedora@nodejs ~]$ python3 -c "import socket;print(socket.gethostbyname('mongodb.nodejs-ex.svc.cluster.local'))"
+10.108.188.170
+[fedora@nodejs ~]$ python3 -c "import socket;print(socket.gethostbyname('mongodb'))"
+10.108.188.170
+----
+
+==== TCP connection
+After connecting to the nodejs virtual machine via ssh we can use `ss` to determine the current TCP connections.  We are specifically looking for the established connections to the MongoDB service that is running on the mongodb virtual machine on node kn2.
+
+[source,bash]
+----
+[fedora@nodejs ~]$ ss -tanp
+State      Recv-Q Send-Q                Local Address:Port                               Peer Address:Port
+... output ...
+LISTEN     0      128                               *:8080                                          *:*
+ESTAB      0      0                        10.244.1.8:47826                            10.108.188.170:27017
+ESTAB      0      0                        10.244.1.8:47824                            10.108.188.170:27017
+... output ...
+----
+
+==== Logs
+[source,bash]
+----
+[fedora@nodejs ~]$ journalctl -u nodejs
+...output..
+Apr 18 20:07:37 nodejs.localdomain node[4303]: Connected to MongoDB at: mongodb://nodejs:nodejspassword@mongodb/nodejs
+...output...
+----
+
+== Ingress to VM communication
+
+temp notes
+- tcpdump or would skydive show
+- guess: nodeport -> nginx pod -> pod -> vm
+- screenshot of nginx status page
+
+
+[source,bash]
+----
+----
