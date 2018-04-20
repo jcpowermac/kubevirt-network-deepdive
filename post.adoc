@@ -730,10 +730,15 @@ Apr 18 20:07:37 nodejs.localdomain node[4303]: Connected to MongoDB at: mongodb:
 == Ingress to VM communication
 
 
-=== Connectivity Tests
-==== Nginx Vhost Traffic Status
-image::nginx-vts.png[nginx-vts]
 
+=== Connectivity Tests
+
+
+
+==== Nginx Vhost Traffic Status
+
+The image below shows the requests that Nginx is receiving for `nodejs.ingress.virtomation.com`.
+image::nginx-vts.png[nginx-vts]
 
 ==== Service NodePort to Nginx Pod
 
@@ -778,6 +783,20 @@ E.      m|.@.?.....2...34u0.....[...n...........
         ETag: W/"9edb-SZeP35LuygZ9MOrPTIySYOu9sAE"
         Content-Encoding: gzip
 
+----
+
+==== Nginx Pod to NodeJS VM
+
+In (1) we can see flows to and from `10.244.1.4` and `10.244.1.8`. `.8` is the nodejs virtual machine and
+`.4` is as listed below the nginx-ingress-controller.
+
+[source,bash]
+----
+$ kubectl get pod --all-namespaces -o wide
+NAMESPACE       NAME                                          READY     STATUS    RESTARTS   AGE       IP              NODE
+...output...
+ingress-nginx   nginx-ingress-controller-85c8787886-vf5tp     1/1       Running   0          1d        10.244.1.4      kn1.virtomation.com
+...output...
 ----
 
 image::skydive-ingress-vm.png[ingress-vm]
