@@ -729,12 +729,58 @@ Apr 18 20:07:37 nodejs.localdomain node[4303]: Connected to MongoDB at: mongodb:
 
 == Ingress to VM communication
 
-temp notes
-- tcpdump or would skydive show
-- guess: nodeport -> nginx pod -> pod -> vm
-- screenshot of nginx status page
 
+=== Connectivity Tests
+==== Nginx Vhost Traffic Status
+image::nginx-vts.png[nginx-vts]
+
+
+==== Service NodePort to Nginx Pod
+
+My `tcpdump` fu is lacking so I found an
+https://sites.google.com/site/jimmyxu101/testing/use-tcpdump-to-monitor-http-traffic[example] query
+that will provide the details we are looking for. I removed a significant amount of the content
+but you can see my desktop (172.31.51.52) create a `GET` request to the NodePort 30000.
+This could have also been done in Skydive but I wanted to provide an alternative if you didn't want to install
+it or just stick to the cli.
 
 [source,bash]
 ----
+# tcpdump -nni eth0 -A -s 0 'tcp port 30000 and (((ip[2:2] - ((ip[0]&0xf)<<2)) - ((tcp[12]&0xf0)>>2)) != 0)'
+
+...output...
+
+13:24:52.197092 IP 172.31.51.52.36494 > 172.31.50.231.30000: Flags [P.], seq 2685726663:2685727086, ack 277056091, win 491, options [nop,nop,TS val 267689990 ecr 151714950], length 423
+E... .@.?.Z...34..2...u0.......[....r......
+....
+..GET / HTTP/1.1
+Host: nodejs.ingress.virtomation.com:30000
+User-Agent: Mozilla/5.0 (X11; Fedora; Linux x86_64; rv:59.0) Gecko/20100101 Firefox/59.0
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+Upgrade-Insecure-Requests: 1
+If-None-Match: W/"9edb-O5JGhneli0eCE6G2kFY5haMKg5k"
+Cache-Control: max-age=0
+
+
+13:24:52.215284 IP 172.31.50.231.30000 > 172.31.51.52.36494: Flags [P.], seq 1:2362, ack 423, win 236, options [nop,nop,TS val 151723713 ecr 267689990], length 2361
+E.      m|.@.?.....2...34u0.....[...n...........
+        .......HTTP/1.1 200 OK
+        Server: nginx/1.13.12
+        Date: Fri, 20 Apr 2018 13:24:52 GMT
+        Content-Type: text/html; charset=utf-8
+        Transfer-Encoding: chunked
+        Connection: keep-alive
+        Vary: Accept-Encoding
+        X-Powered-By: Express
+        ETag: W/"9edb-SZeP35LuygZ9MOrPTIySYOu9sAE"
+        Content-Encoding: gzip
+
 ----
+
+image::skydive-ingress-vm.png[ingress-vm]
+
+
+
