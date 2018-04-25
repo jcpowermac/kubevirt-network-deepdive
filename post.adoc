@@ -241,15 +241,15 @@ skydive-analyzer-5db567b4bc-m77kq   2/2       Running   0          5m
 
 === ingress-nginx
 
-To provide external access our example NodeJS application we need to an ingress controller.
-For this example we are going to using https://github.com/kubernetes/ingress-nginx/tree/master/deploy[ingress-nginx]
+To provide external access for our example NodeJS application we need to create an ingress controller.
+For this example we are going to use https://github.com/kubernetes/ingress-nginx/tree/master/deploy[ingress-nginx].
 
 I created a simple script `ingress.sh` that follows the installation documentation for ingress-nginx
-with a couple minor modifications:
+with a couple of minor modifications:
 
-- Patch the `nginx-configuration` ConfigMap to enable vts status
+- Patch the `nginx-configuration` ConfigMap to enable virtual host traffic status.
 - Add an additional `containerPort` to the deployment and an additional port to the service.
-- Create an ingress to access nginx status page
+- Create an `Ingress` object to access nginx status page.
 
 The script and additional files are available in the github repo listed below.
 [source,bash]
@@ -283,8 +283,8 @@ $ kubectl create ns nodejs-ex
 namespace "nodejs-ex" created
 ----
 
-The `nodejs-ex.yaml` contains multiple objects.  The definitions for our
-two virtual machines - mongodb and nodejs.  Two Kubernetes `Services` and a one Kubernetes
+The `nodejs-ex.yaml` file contains multiple objects.  Those are: definitions for our
+two virtual machines - mongodb and nodejs, two Kubernetes `Services`, and one Kubernetes
 `Ingress` object. These instances will be created as offline virtual machines so after
 `kubectl create` we will start them up.
 
@@ -298,21 +298,21 @@ service "nodejs" created
 ingress "nodejs" created
 ----
 
-Start the nodejs virtual machine
+Start the nodejs virtual machine.
 [source,bash]
 ----
 $ kubectl patch offlinevirtualmachine nodejs --type merge -p '{"spec":{"running":true}}' -n nodejs-ex
 offlinevirtualmachine "nodejs" patched
 ----
 
-Start the mongodb virtual machine
+Start the mongodb virtual machine.
 [source,bash]
 ----
 $ kubectl patch offlinevirtualmachine mongodb --type merge -p '{"spec":{"running":true}}' -n nodejs-ex
 offlinevirtualmachine "mongodb" patched
 ----
 
-Review kubevirt virtual machine objects
+Review kubevirt virtual machine objects.
 [source,bash]
 ----
 $ kubectl get ovms -n nodejs-ex
@@ -326,7 +326,7 @@ mongodb   4m
 nodejs    5m
 ----
 
-Where are the virtual machines and what is their IP address?
+Where are the virtual machines and what are their IP addresses?
 [source,bash]
 ----
 $ kubectl get pod -o wide -n nodejs-ex
@@ -334,15 +334,15 @@ NAME                          READY     STATUS    RESTARTS   AGE       IP       
 virt-launcher-mongodb-qdpmg   2/2       Running   0          4m        10.244.2.7   kn2.virtomation.com
 virt-launcher-nodejs-5r59c    2/2       Running   0          4m        10.244.1.8   kn1.virtomation.com
 ----
-NOTE: To test virtual machine to virtual machine network connectivity I purposely set the
-host where which instance would run by using a `nodeSelector`.
+NOTE: To test virtual machine to virtual machine network connectivity I
+purposely set hosts where each instance would run by using `nodeSelector`.
 
 == Installing the NodeJS Example Application
 
-To quickly deploy our example application Ansible project
-is included in the repository.  Two inventory files need to be modified
-before executing `ansible-playbook`. Within `all.yml` change the `analyzers` IP address
-to what is listed in the command below.
+An Ansible project to quickly deploy our example is included in the repository.
+Two inventory files need to be modified before executing `ansible-playbook`.
+You should change `analyzers` IP address inside `all.yml` to match what is
+listed in the command below.
 [source,bash]
 ----
 $ kubectl get endpoints -n skydive
@@ -419,7 +419,7 @@ systemctl restart dnsmasq
 
 === Testing our application
 
-This application uses MongoDB to store the views of the website.  Listing the `count-value`
+This application uses MongoDB to store views of the website.  Listing the `count-value`
 shows that the database is connected and networking is functioning correctly.
 [source,bash]
 ----
@@ -439,7 +439,7 @@ $ curl http://nodejs.ingress.virtomation.com:30000/
 
 = KubeVirt Networking
 
-Now that we shown that kubernetes, kubevirt, ingress-nginx and flannel work together how is it accomplished?
+Now that we have shown that kubernetes, kubevirt, ingress-nginx and flannel work together, how is it accomplished?
 First let's go over what is going on in kubevirt specifically.
 
 
@@ -447,7 +447,7 @@ image::diagram.png[KubeVirt networking]
 
 == virt-launcher - https://github.com/kubevirt/kubevirt/tree/master/pkg/virt-launcher/virtwrap[virtwrap]
 
-virt-launcher is the pod that runs the necessary components instantiate and run a virtual machine.
+virt-launcher is the pod that runs components that are necessary to instantiate and run virtual machines.
 We are only going to concentrate on the network portion in this post.
 
 === https://github.com/kubevirt/kubevirt/blob/master/pkg/virt-launcher/virtwrap/manager.go[virtwrap manager]
@@ -498,7 +498,7 @@ kubernetes objects, host, pod and virtual machine networking components.  Then w
 
 === services
 
-There are two services defined in the manifest that was deployed above.  One each for
+There are two services defined in the manifest that was deployed above, for
 mongodb and nodejs applications. This allows us to use the hostname `mongodb` to connect to MongoDB.
 Review https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/[DNS for Services and Pods] for additional information.
 
@@ -520,7 +520,15 @@ spec:
     kubevirt.io: virt-launcher
     kubevirt.io/domain: nodejs
 ----
-defined in the Service object.
+
+[source,yaml]
+----
+spec:
+  selector:
+    kubevirt.io: virt-launcher
+    kubevirt.io/domain: mongodb
+----
+defined in the Service objects.
 
 [source,bash]
 ----
@@ -532,7 +540,7 @@ nodejs    10.244.1.8:8080    1h
 
 === ingress
 
-Also defined in the manifest was the ingress object.  This will allow us to contact
+Also defined in the manifest was the `Ingress` object.  This will allow us to contact
 the NodeJS example application using a URL.
 
 [source,bash]
@@ -698,8 +706,8 @@ vnet0      bridge     br1        e1000       0a:58:0a:f4:01:08
 
 === interfaces
 
-Fortunately the vm interfaces are fairly typical.  Just the single interface that has been assigned the
-original pod ip address.
+Fortunately the vm interfaces are fairly typical.  Just a single interface with the
+original pod IP address assigned to it.
 
 WARNING: The MTU of the virtual machine interface is set to 1500. The network interfaces
 upstream are set to 1450.
@@ -730,7 +738,7 @@ nameserver 10.96.0.10
 == VM to VM communication
 
 The virtual machines are on differnet hosts.  This was done purposely to show
-that connectivity between virtual machine and hosts. Here we finally get to use
+that this inter-node connectivity works. Here we finally get to use
 Skydive.  The real-time topology below along with arrows annotate the flow
 of packets between the host, pod and virtual machine network devices.
 
@@ -739,15 +747,15 @@ image::kubevirt-skydive-vm-to-vm.png[vm-to-vm]
 === Connectivity Tests
 
 To confirm connectivity we are going to do a few things.  First check for DNS
-resolution for the mongodb service.  Next look a established connection to
-MongoDB and finally check the NodeJS logs looking for confirmation of database
+resolution for the mongodb service.  Next look for an established connection to
+MongoDB. And finally check the NodeJS logs for confirmation of database
 connection.
 
 ==== DNS resolution
 
-Service-based DNS resolution is an important feature of Kubernetes. Since
-dig,host or nslookup are not installed in our virtual machine a quick python script
-fills in.  This output below shows that the mongodb name is available for
+Service-based DNS resolution is an important feature of Kubernetes. Since neither of
+`dig`, `host` or `nslookup` are installed in our virtual machine a quick python script
+fills in the gap.  This output below shows that the mongodb name is available for
 resolution.
 
 [source,bash]
@@ -826,7 +834,7 @@ to the `cni0` bridge to communicate with the pod and vm.
 === Connectivity Tests
 
 In the section where we installed the application we already tested for connectivity but let's take
-this is little further to confirm.
+this a little further to confirm.
 
 ==== Nginx Vhost Traffic Status
 
@@ -842,7 +850,7 @@ https://sites.google.com/site/jimmyxu101/testing/use-tcpdump-to-monitor-http-tra
 that will provide the details we are looking for. I removed a significant amount of the content
 but you can see my desktop (172.31.51.52) create a `GET` request to the NodePort 30000.
 This could have also been done in Skydive but I wanted to provide an alternative if you didn't want to install
-it or just stick to the cli.
+it or just stick to CLI.
 
 [source,bash]
 ----
@@ -883,7 +891,7 @@ E.      m|.@.?.....2...34u0.....[...n...........
 ==== Nginx Pod to NodeJS VM
 
 In (1) we can see flows to and from `10.244.1.4` and `10.244.1.8`. `.8` is the nodejs virtual machine and
-`.4` is as listed below the nginx-ingress-controller.
+`.4` is nginx-ingress-controller, as listed below.
 
 [source,bash]
 ----
@@ -898,6 +906,6 @@ image::skydive-ingress-vm.png[ingress-vm]
 
 = Final Thoughts
 
-We have went through quite a bit in this deep dive from installation, KubeVirt specific
-networking details and kubernetes, host, pod and virtual machine level configurations.
-Finishing up with the packet flow between virtual machine to virtual machine and ingress to virtual machine.
+We went through quite a bit in this deep dive from installation, KubeVirt specific
+networking details and kubernetes, host, pod and virtual machine level configurations;
+finishing up with the packet flow between virtual machine to virtual machine and ingress to virtual machine.
