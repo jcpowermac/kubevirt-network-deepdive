@@ -1,14 +1,16 @@
+# Introduction
+
 In this post we will research and discover how [KubeVirt](https://github.com/kubevirt/kubevirt) networking functions along with Kubernetes objects services and ingress. This should also provide enough technical details to start troubleshooting your own environment if a problem should arise. So with that let’s get started.
+
+# Component Installation
 
 We are going to walk through the installation that assisted me to write this post. I have created three CentOS 7.4 with nested virtualization enabled where Kubernetes will be installed, which is up next.
 
-Kubernetes
-==========
+## Kubernetes
 
 I am rehashing what is available in [Kubernetes documentation](https://kubernetes.io/docs/setup/independent/install-kubeadm/) just to make it easier to follow along and provide an identical environment that I used to research KubeVirt networking.
 
-Packages
---------
+### Packages
 
 Add the Kubernetes repository
 
@@ -34,8 +36,7 @@ Update and install prerequisites.
                 curl \
                 wget -y
 
-Docker prerequisites
---------------------
+### Docker prerequisites
 
 For docker storage we will use a new disk `vdb` formatted XFS using the Overlay driver.
 
@@ -53,8 +54,7 @@ Start and enable Docker
     systemctl start docker
     systemctl enable docker
 
-Additional prerequisites
-------------------------
+### Additional prerequisites
 
 In this section we continue with the required prerequistes. This is also described in the [install kubeadm](https://kubernetes.io/docs/setup/independent/install-kubeadm/#installing-kubeadm-kubelet-and-kubectl) kubernetes documentation.
 
@@ -89,8 +89,7 @@ And let’s also permanently disable selinux - yes I know. If this isn’t done 
     SELINUXTYPE=targeted
     EOF
 
-Initialize cluster
-==================
+## Initialize cluster
 
 Now we are ready to [create our cluster](https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/) starting with the first and only master.
 
@@ -123,10 +122,9 @@ Once all the nodes have been joined check the status.
     kn1.virtomation.com   Ready     <none>    10m       v1.9.4
     kn2.virtomation.com   Ready     <none>    10m       v1.9.4
 
-Additional Components
-=====================
+## Additional Components
 
-[KubeVirt](http://www.kubevirt.io)
+### [KubeVirt](http://www.kubevirt.io)
 ----------------------------------
 
 The recommended installation method is to use [kubevirt-ansible](https://github.com/kubevirt/kubevirt-ansible). For this example I don’t require storage so just deploying using `kubectl create`.
@@ -151,8 +149,7 @@ Let’s make sure that all the pods are running.
     virt-handler-xlfc2                 1/1       Running   0          4m
     virt-handler-z5lsh                 1/1       Running   0          4m
 
-Skydive
--------
+### Skydive
 
 I have used [Skydive](https://github.com/skydive-project/skydive) in the past. It is a great tool to understand the topology of software-defined-networking. The only caveat is that Skydive doesn’t create a complete topology when using Flannel but there is still a good picture of what is going on. So with that let’s go ahead and install.
 
@@ -167,8 +164,7 @@ Check the status of Skydive agent and analyzer
     skydive-agent-c29l7                 1/1       Running   0          5m
     skydive-analyzer-5db567b4bc-m77kq   2/2       Running   0          5m
 
-ingress-nginx
--------------
+### ingress-nginx
 
 To provide external access our example NodeJS application we need to an ingress controller. For this example we are going to using [ingress-nginx](https://github.com/kubernetes/ingress-nginx/tree/master/deploy)
 
@@ -193,10 +189,11 @@ After the script is complete confirm that ingress-nginx pods are running.
     default-http-backend-55c6c69b88-jpl95       1/1       Running   0          1m
     nginx-ingress-controller-85c8787886-vf5tp   1/1       Running   0          1m
 
+# KubeVirt Virtual Machines
+
 Now we are at a point where we can deploy our first KubeVirt virtual machines. These instances are where we will install our simple NodeJS and MongoDB application.
 
-Create objects
-==============
+## Create objects
 
 Let’s create a clean new namespace to use.
 
@@ -245,8 +242,7 @@ Where are the virtual machines and what is their IP address?
 >
 > To test virtual machine to virtual machine network connectivity I purposely set the host where which instance would run by using a `nodeSelector`.
 
-Installing the NodeJS Example Application
-=========================================
+## Installing the NodeJS Example Application
 
 To quickly deploy our example application Ansible project is included in the repository. Two inventory files need to be modified before executing `ansible-playbook`. Within `all.yml` change the `analyzers` IP address to what is listed in the command below.
 
@@ -263,8 +259,7 @@ And finally use the IP Addresses from the `kubectl get pod -o wide -n nodejs-ex`
     ansible-playbook -i inventory/hosts.ini playbook/main.yml
     ... output ...
 
-Determine Ingress URL
----------------------
+### Determine Ingress URL
 
 First let’s find the host. This is defined within the `Ingress` object. In this case it is `nodejs.ingress.virtomation.com`.
 
@@ -289,8 +284,7 @@ What node is the nginx-ingress controller running on? This is needed to configur
     default-http-backend-55c6c69b88-jpl95       1/1       Running   0          53m       10.244.1.3   kn1.virtomation.com
     nginx-ingress-controller-85c8787886-vf5tp   1/1       Running   0          53m       10.244.1.4   kn1.virtomation.com
 
-Configure DNS
--------------
+### Configure DNS
 
 In my homelab I am using dnsmasq. To support ingress add the host where the controller is running as an A record.
 
@@ -308,8 +302,7 @@ Restart dnsmasq for the new config
 
     systemctl restart dnsmasq
 
-Testing our application
------------------------
+### Testing our application
 
 This application uses MongoDB to store the views of the website. Listing the `count-value` shows that the database is connected and networking is functioning correctly.
 
@@ -325,26 +318,28 @@ This application uses MongoDB to store the views of the website. Listing the `co
 
     ...output...
 
+# KubeVirt Networking
+
 Now that we shown that kubernetes, kubevirt, ingress-nginx and flannel work together how is it accomplished? First let’s go over what is going on in kubevirt specifically.
 
 ![KubeVirt networking](images/diagram.png)
 
-virt-launcher - [virtwrap](https://github.com/kubevirt/kubevirt/tree/master/pkg/virt-launcher/virtwrap)
+## virt-launcher - [virtwrap](https://github.com/kubevirt/kubevirt/tree/master/pkg/virt-launcher/virtwrap)
 =======================================================================================================
 
 virt-launcher is the pod that runs the necessary components instantiate and run a virtual machine. We are only going to concentrate on the network portion in this post.
 
-[virtwrap manager](https://github.com/kubevirt/kubevirt/blob/master/pkg/virt-launcher/virtwrap/manager.go)
+### [virtwrap manager](https://github.com/kubevirt/kubevirt/blob/master/pkg/virt-launcher/virtwrap/manager.go)
 ----------------------------------------------------------------------------------------------------------
 
 Before the virtual machine is started the `preStartHook` will run `SetupPodNetwork`.
 
-SetupPodNetwork → [SetupDefaultPodNetwork](https://github.com/kubevirt/kubevirt/blob/master/pkg/virt-launcher/virtwrap/network/network.go)
+### SetupPodNetwork → [SetupDefaultPodNetwork](https://github.com/kubevirt/kubevirt/blob/master/pkg/virt-launcher/virtwrap/network/network.go)
 ------------------------------------------------------------------------------------------------------------------------------------------
 
 This function calls three functions that are detailed below `discoverPodNetworkInterface`, `preparePodNetworkInterface` and `StartDHCP`
 
-### [discoverPodNetworkInterface](https://github.com/kubevirt/kubevirt/blob/master/pkg/virt-launcher/virtwrap/network/network.go)
+#### [discoverPodNetworkInterface](https://github.com/kubevirt/kubevirt/blob/master/pkg/virt-launcher/virtwrap/network/network.go)
 
 This function gathers the following information about the pod interface:
 
@@ -358,7 +353,7 @@ This function gathers the following information about the pod interface:
 
 This is stored for later use in configuring DHCP.
 
-### [preparePodNetworkInterfaces](https://github.com/kubevirt/kubevirt/blob/master/pkg/virt-launcher/virtwrap/network/network.go)
+#### [preparePodNetworkInterfaces](https://github.com/kubevirt/kubevirt/blob/master/pkg/virt-launcher/virtwrap/network/network.go)
 
 Once the current details of the pod interface have been stored following operations are performed:
 
@@ -376,17 +371,17 @@ Once the current details of the pod interface have been stored following operati
 
 This will provide libvirt a bridge to use for the virtual machine that will be created.
 
-### StartDHCP → DHCPServer → [SingleClientDHCPServer](https://github.com/kubevirt/kubevirt/blob/master/pkg/virt-launcher/virtwrap/network/dhcp/dhcp.go)
+#### StartDHCP → DHCPServer → [SingleClientDHCPServer](https://github.com/kubevirt/kubevirt/blob/master/pkg/virt-launcher/virtwrap/network/dhcp/dhcp.go)
 
 This DHCP server only provides a single address to a client in this case the virtual machine that will be started. The network details - the IP address, gateway, routes, DNS servers and suffixes are taken from the pod which will be served to the virtual machine.
 
+# Networking in detail
+
 Now that we have a clearier picture of kubevirt networking we will continue with details regarding kubernetes objects, host, pod and virtual machine networking components. Then we will finish up with two scenarios: virtual machine to virtual machine communication and ingress to virtual machine.
 
-Kubernetes-level
-================
+## Kubernetes-level
 
-services
---------
+### services
 
 There are two services defined in the manifest that was deployed above. One each for mongodb and nodejs applications. This allows us to use the hostname `mongodb` to connect to MongoDB. Review [DNS for Services and Pods](https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/) for additional information.
 
@@ -395,8 +390,7 @@ There are two services defined in the manifest that was deployed above. One each
     mongodb   ClusterIP   10.108.188.170   <none>        27017/TCP   3h
     nodejs    ClusterIP   10.110.233.114   <none>        8080/TCP    3h
 
-endpoints
----------
+### endpoints
 
 The endpoints below were automatically created because there was a selector
 
@@ -412,8 +406,7 @@ defined in the Service object.
     mongodb   10.244.2.7:27017   1h
     nodejs    10.244.1.8:8080    1h
 
-ingress
--------
+### ingress
 
 Also defined in the manifest was the ingress object. This will allow us to contact the NodeJS example application using a URL.
 
@@ -421,11 +414,9 @@ Also defined in the manifest was the ingress object. This will allow us to conta
     NAME      HOSTS                            ADDRESS   PORTS     AGE
     nodejs    nodejs.ingress.virtomation.com             80        3h
 
-Host-level
-==========
+## Host-level
 
-interfaces
-----------
+### interfaces
 
 A few important interfaces to note. The `flannel.1` interface is type `vxlan` for connectivity between hosts. I removed from the `ip a` output the veth interfaces but the details are shown further below with `bridge link show`.
 
@@ -463,8 +454,7 @@ A few important interfaces to note. The `flannel.1` interface is type `vxlan` fo
     11: veth25933a54 state UP @docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master cni0 state forwarding priority 32 cost 2
     12: vethe3d701e7 state UP @docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master cni0 state forwarding priority 32 cost 2
 
-routes
-------
+### routes
 
 The pod network subnet is `10.244.0.0/16` and broken up per host:
 
@@ -484,8 +474,7 @@ So the table will route the packets to correct interface.
     172.17.0.0/16 dev docker0 proto kernel scope link src 172.17.0.1
     172.31.50.0/24 dev eth0 proto kernel scope link src 172.31.50.231
 
-iptables
---------
+### iptables
 
 To also support kubernetes services kube-proxy writes iptables rules for those services. In the output below you can see our mongodb and nodejs services with destination NAT rules defined. For more information regarding iptables and services refer to [debug-service](https://kubernetes.io/docs/tasks/debug-application-cluster/debug-service/#is-kube-proxy-writing-iptables-rules) in the kubernetes documentation.
 
@@ -501,11 +490,9 @@ To also support kubernetes services kube-proxy writes iptables rules for those s
     KUBE-SEP-JOPA2J4R76O5OVH5  all  --  0.0.0.0/0            0.0.0.0/0            /* nodejs-ex/nodejs: */
     KUBE-SEP-QD4L7MQHCIVOWZAO  all  --  0.0.0.0/0            0.0.0.0/0            /* nodejs-ex/mongodb: */
 
-Pod-level
-=========
+## Pod-level
 
-interfaces
-----------
+### interfaces
 
 The bridge `br1` is the main focus in the pod level. It contains the `eth0` and `vnet0` ports. `eth0` becomes the uplink to the bridge which is the other side of the veth pair which is a port on the host’s `cni0` bridge.
 
@@ -536,8 +523,7 @@ Showing the bridge `br1` member ports.
     3: eth0 state UP @if12: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master br1 state forwarding priority 32 cost 2
     5: vnet0 state UNKNOWN : <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 master br1 state forwarding priority 32 cost 100
 
-DHCP
-----
+### DHCP
 
 The virtual machine network is configured by DHCP. You can see `virt-launcher` has UDP port 67 open on the `br1` interface to serve DHCP to the virtual machine.
 
@@ -545,8 +531,7 @@ The virtual machine network is configured by DHCP. You can see `virt-launcher` h
     Netid  State    Recv-Q   Send-Q      Local Address:Port      Peer Address:Port
     udp    UNCONN   0        0             0.0.0.0%br1:67             0.0.0.0:*      users:(("virt-launcher",pid=10,fd=12))
 
-libvirt
--------
+### libvirt
 
 With `virsh domiflist` we can also see that the `vnet0` interface is a port on the `br1` bridge.
 
@@ -554,11 +539,9 @@ With `virsh domiflist` we can also see that the `vnet0` interface is a port on t
     Interface  Type       Source     Model       MAC
     vnet0      bridge     br1        e1000       0a:58:0a:f4:01:08
 
-VM-level
-========
+## VM-level
 
-interfaces
-----------
+### interfaces
 
 Fortunately the vm interfaces are fairly typical. Just the single interface that has been assigned the original pod ip address.
 
@@ -575,8 +558,7 @@ Fortunately the vm interfaces are fairly typical. Just the single interface that
         inet6 fe80::858:aff:fef4:108/64 scope link
            valid_lft forever preferred_lft forever
 
-DNS
----
+### DNS
 
 Just quickly wanted to cat the `/etc/resolv.conf` file to show that DNS is configured so that kube-dns will be properly queried.
 
@@ -585,19 +567,17 @@ Just quickly wanted to cat the `/etc/resolv.conf` file to show that DNS is confi
     search nodejs-ex.svc.cluster.local. svc.cluster.local. cluster.local.
     nameserver 10.96.0.10
 
-VM to VM communication
-======================
+## VM to VM communication
 
 The virtual machines are on differnet hosts. This was done purposely to show that connectivity between virtual machine and hosts. Here we finally get to use Skydive. The real-time topology below along with arrows annotate the flow of packets between the host, pod and virtual machine network devices.
 
 ![vm-to-vm](images/kubevirt-skydive-vm-to-vm.png)
 
-Connectivity Tests
-------------------
+### Connectivity Tests
 
 To confirm connectivity we are going to do a few things. First check for DNS resolution for the mongodb service. Next look a established connection to MongoDB and finally check the NodeJS logs looking for confirmation of database connection.
 
-### DNS resolution
+#### DNS resolution
 
 Service-based DNS resolution is an important feature of Kubernetes. Since dig,host or nslookup are not installed in our virtual machine a quick python script fills in. This output below shows that the mongodb name is available for resolution.
 
@@ -606,7 +586,7 @@ Service-based DNS resolution is an important feature of Kubernetes. Since dig,ho
     [fedora@nodejs ~]$ python3 -c "import socket;print(socket.gethostbyname('mongodb'))"
     10.108.188.170
 
-### TCP connection
+#### TCP connection
 
 After connecting to the nodejs virtual machine via ssh we can use `ss` to determine the current TCP connections. We are specifically looking for the established connections to the MongoDB service that is running on the mongodb virtual machine on node kn2.
 
@@ -618,15 +598,14 @@ After connecting to the nodejs virtual machine via ssh we can use `ss` to determ
     ESTAB      0      0                        10.244.1.8:47824                            10.108.188.170:27017
     ... output ...
 
-### Logs
+#### Logs
 
     [fedora@nodejs ~]$ journalctl -u nodejs
     ...output..
     Apr 18 20:07:37 nodejs.localdomain node[4303]: Connected to MongoDB at: mongodb://nodejs:nodejspassword@mongodb/nodejs
     ...output...
 
-Ingress to VM communication
-===========================
+## Ingress to VM communication
 
 The topology image below shows the packet flow when using a ingress kubernetes object. The commands below the image will provide additional details.
 
@@ -653,18 +632,17 @@ Since the ingress-nginx pod is on the same host as the nodejs virtual machine we
     10.244.1.0/24 dev cni0 proto kernel scope link src 10.244.1.1
     ...output...
 
-Connectivity Tests
-------------------
+### Connectivity Tests
 
 In the section where we installed the application we already tested for connectivity but let’s take this is little further to confirm.
 
-### Nginx Vhost Traffic Status
+#### Nginx Vhost Traffic Status
 
 ingress-nginx provides an optional setting to enable traffic status - which we already enabled. The screenshot below shows the requests that Nginx is receiving for `nodejs.ingress.virtomation.com`.
 
 ![nginx-vts](images/nginx-vts.png)
 
-### Service NodePort to Nginx Pod
+#### Service NodePort to Nginx Pod
 
 My `tcpdump` fu is lacking so I found an [example](https://sites.google.com/site/jimmyxu101/testing/use-tcpdump-to-monitor-http-traffic) query that will provide the details we are looking for. I removed a significant amount of the content but you can see my desktop (172.31.51.52) create a `GET` request to the NodePort 30000. This could have also been done in Skydive but I wanted to provide an alternative if you didn’t want to install it or just stick to the cli.
 
@@ -700,7 +678,7 @@ My `tcpdump` fu is lacking so I found an [example](https://sites.google.com/site
             ETag: W/"9edb-SZeP35LuygZ9MOrPTIySYOu9sAE"
             Content-Encoding: gzip
 
-### Nginx Pod to NodeJS VM
+#### Nginx Pod to NodeJS VM
 
 In (1) we can see flows to and from `10.244.1.4` and `10.244.1.8`. `.8` is the nodejs virtual machine and `.4` is as listed below the nginx-ingress-controller.
 
