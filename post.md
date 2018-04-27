@@ -325,17 +325,15 @@ Now that we shown that kubernetes, kubevirt, ingress-nginx and flannel work toge
 ![KubeVirt networking](images/diagram.png)
 
 ## virt-launcher - [virtwrap](https://github.com/kubevirt/kubevirt/tree/master/pkg/virt-launcher/virtwrap)
-=======================================================================================================
+
 
 virt-launcher is the pod that runs the necessary components instantiate and run a virtual machine. We are only going to concentrate on the network portion in this post.
 
 ### [virtwrap manager](https://github.com/kubevirt/kubevirt/blob/master/pkg/virt-launcher/virtwrap/manager.go)
-----------------------------------------------------------------------------------------------------------
 
 Before the virtual machine is started the `preStartHook` will run `SetupPodNetwork`.
 
 ### SetupPodNetwork → [SetupDefaultPodNetwork](https://github.com/kubevirt/kubevirt/blob/master/pkg/virt-launcher/virtwrap/network/network.go)
-------------------------------------------------------------------------------------------------------------------------------------------
 
 This function calls three functions that are detailed below `discoverPodNetworkInterface`, `preparePodNetworkInterface` and `StartDHCP`
 
@@ -690,4 +688,5 @@ In (1) we can see flows to and from `10.244.1.4` and `10.244.1.8`. `.8` is the n
 
 ![ingress-vm](images/skydive-ingress-vm.png)
 
+# Final Thoughts
 We have went through quite a bit in this deep dive from installation, KubeVirt specific networking details and kubernetes, host, pod and virtual machine level configurations. Finishing up with the packet flow between virtual machine to virtual machine and ingress to virtual machine.
