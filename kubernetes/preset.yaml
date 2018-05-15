@@ -1,0 +1,18 @@
+---
+apiVersion: kubevirt.io/v1alpha1
+kind: VirtualMachinePreset
+metadata:
+  name: m1.small 
+spec:
+  selector:
+    matchLabels:
+      kubevirt.io/size: m1.small
+  domain:
+    devices: {}
+    features:
+      acpi: {}
+      apic: {}
+    resources:
+      requests:
+        memory: 2048M
+        cpu: 1 

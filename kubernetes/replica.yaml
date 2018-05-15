@@ -1,0 +1,43 @@
+---
+apiVersion: kubevirt.io/v1alpha1
+kind: VirtualMachineReplicaSet 
+metadata:
+  name: replica
+  namespace: nodejs-ex
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      name: replica
+  template:
+    metadata:
+      labels:
+        name: replica
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        devices:
+          disks:
+          - disk:
+              bus: virtio
+            name: disk0
+            volumeName: nodejs-vol0
+          - cdrom:
+              readonly: true
+            name: cloudinitdisk
+            volumeName: cloudinitvolume
+        machine:
+          type: q35
+        resources:
+          requests:
+            memory: 1024M
+            cpu: 1 
+      volumes:
+      - name: nodejs-vol0
+        registryDisk:
+          image: kubevirt/fedora-cloud-registry-disk-demo
+      - cloudInitNoCloud:
+          userDataBase64: I2Nsb3VkLWNvbmZpZwpob3N0bmFtZTogbm9kZWpzCnNzaF9wd2F1dGg6IFRydWUKZGlzYWJsZV9yb290OiBmYWxzZQpzc2hfYXV0aG9yaXplZF9rZXlzOgotIHNzaC1yc2EgQUFBQUIzTnphQzF5YzJFQUFBQURBUUFCQUFBQkFRREdsaVRlN1RFcnVqODlxWVFkM0VqcDBIeHJWYXp1bldtVXVUeWEzQjhxR2FQSkxacVJYQU9DTWhkM2VSMkdjZEhRc051SjU4RVBQM1dTT3o4VXFaRTQveTRGY1FyZ0hKc1B5ZXRrZ2c4YVBpeElJcGw5OFBUUUxYSmxwT3Y0NUpMWmhGalN0bGtuazhqZkpzWisxOURWQ1Nxa05pdCtGNnZUWGJuYjdrYnBydlBOUGZqQ2VCYTR5OUxreDU3NnpSZnd3VWdCRnFGYkozTFJ5ZFJTemNvalBsZU5jaXJDUnk4c3BTMC9ZbjlYVjlxeGttbENHTUg2VUo0bCtoRHhzaW54L2RDcjAyQkN5VitKWENqb2JGa0RVeithb0VUcnNtcDBOaTZrcmtXYnJlcTJndk50aW9LNmJxNmJnZ3FiSDBuRXRZcGtpZlJGbm5IK1lyK0xmRWtsIHJvb3RAa20xLnZpcnRvbWF0aW9uLmNvbQo=
+        name: cloudinitvolume
+
