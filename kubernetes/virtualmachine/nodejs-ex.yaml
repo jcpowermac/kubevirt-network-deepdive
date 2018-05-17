@@ -14,7 +14,7 @@ spec:
         app: nodejs
     spec:
       nodeSelector:
-        kubernetes.io/hostname: kn1.virtomation.com
+        kubernetes.io/hostname: ckn1.virtomation.com
       domain:
         cpu:
           cores: 2
@@ -24,8 +24,8 @@ spec:
               bus: virtio
             name: disk0
             volumeName: nodejs-vol0
-          - cdrom:
-              readonly: true
+          - disk:
+              bus: virtio
             name: cloudinitdisk
             volumeName: cloudinitvolume
         machine:
@@ -37,9 +37,9 @@ spec:
       - name: nodejs-vol0
         registryDisk:
           image: kubevirt/fedora-cloud-registry-disk-demo
-      - cloudInitNoCloud:
-          userDataBase64: I2Nsb3VkLWNvbmZpZwpob3N0bmFtZTogbm9kZWpzCnNzaF9wd2F1dGg6IFRydWUKZGlzYWJsZV9yb290OiBmYWxzZQpzc2hfYXV0aG9yaXplZF9rZXlzOgotIHNzaC1yc2EgQUFBQUIzTnphQzF5YzJFQUFBQURBUUFCQUFBQkFRREdsaVRlN1RFcnVqODlxWVFkM0VqcDBIeHJWYXp1bldtVXVUeWEzQjhxR2FQSkxacVJYQU9DTWhkM2VSMkdjZEhRc051SjU4RVBQM1dTT3o4VXFaRTQveTRGY1FyZ0hKc1B5ZXRrZ2c4YVBpeElJcGw5OFBUUUxYSmxwT3Y0NUpMWmhGalN0bGtuazhqZkpzWisxOURWQ1Nxa05pdCtGNnZUWGJuYjdrYnBydlBOUGZqQ2VCYTR5OUxreDU3NnpSZnd3VWdCRnFGYkozTFJ5ZFJTemNvalBsZU5jaXJDUnk4c3BTMC9ZbjlYVjlxeGttbENHTUg2VUo0bCtoRHhzaW54L2RDcjAyQkN5VitKWENqb2JGa0RVeithb0VUcnNtcDBOaTZrcmtXYnJlcTJndk50aW9LNmJxNmJnZ3FiSDBuRXRZcGtpZlJGbm5IK1lyK0xmRWtsIHJvb3RAa20xLnZpcnRvbWF0aW9uLmNvbQo=
-        name: cloudinitvolume
+      - name: cloudinitvolume
+        cloudInitNoCloud:
+          userDataBase64: I2Nsb3VkLWNvbmZpZwpzc2hfcHdhdXRoOiBUcnVlCmRpc2FibGVfcm9vdDogZmFsc2UKc3NoX2F1dGhvcml6ZWRfa2V5czoKLSBzc2gtcnNhIEFBQUFCM056YUMxeWMyRUFBQUFEQVFBQkFBQUJBUURWYURpRDlJOFdZdDNrMXVVYzkzWEF6T1R5a2JtUUJqWjFLS2ZCeUlQeTVMR09NMTJFeno2QTBtemtiNlljKzdZTWNOd3l4WlNhaURLWFpFU3JGWnlZUjlhajVIZEYyT1Vka3liRU5TblFOMld3aVVhQXE0azBiVGI5TjZqb0tzMndNVHlMZGNHVEdUY0pVZkdna0ZyM3B6QjhOckNIYU1PY3hZYWJrL0RpWUs4L2JLUGxhTUdNK0gvSGl6a2UyWnhnZFJGa0hkTUErTFNjR29hbnVNVGxLK2d0Rks0cHBaUEJiNmtxN0JwN0Jad3Rob3kvWW5Wd2F1TDVITmVrN0drNW5LMnpwNkV2ZXZYMmEyNi9lOG80U3NVaHN3eDFqK2dCbDErNzU3YXlGSTMycEdjc0FBN3o2WXBLOTR1dWtZVGNYa0xmYi8xamQ1Sk04dGlpcXpQNSB1c2VyQDQwM2E3YjZiNGY5Ngo=
 
 ---
 apiVersion: kubevirt.io/v1alpha1
@@ -57,7 +57,7 @@ spec:
         app: mongodb
     spec:
       nodeSelector:
-        kubernetes.io/hostname: kn2.virtomation.com
+        kubernetes.io/hostname: ckn2.virtomation.com
       domain:
         cpu:
           cores: 2
@@ -67,8 +67,8 @@ spec:
               bus: virtio
             name: disk0
             volumeName: mongodb-vol0
-          - cdrom:
-              readonly: true
+          - disk:
+              bus: virtio
             name: cloudinitdisk
             volumeName: cloudinitvolume
         machine:
@@ -80,9 +80,9 @@ spec:
       - name: mongodb-vol0
         registryDisk:
           image: kubevirt/fedora-cloud-registry-disk-demo
-      - cloudInitNoCloud:
-          userDataBase64: I2Nsb3VkLWNvbmZpZwpob3N0bmFtZTogbW9uZ29kYgpzc2hfcHdhdXRoOiBUcnVlCmRpc2FibGVfcm9vdDogZmFsc2UKc3NoX2F1dGhvcml6ZWRfa2V5czoKLSBzc2gtcnNhIEFBQUFCM056YUMxeWMyRUFBQUFEQVFBQkFBQUJBUURHbGlUZTdURXJ1ajg5cVlRZDNFanAwSHhyVmF6dW5XbVV1VHlhM0I4cUdhUEpMWnFSWEFPQ01oZDNlUjJHY2RIUXNOdUo1OEVQUDNXU096OFVxWkU0L3k0RmNRcmdISnNQeWV0a2dnOGFQaXhJSXBsOThQVFFMWEpscE92NDVKTFpoRmpTdGxrbms4amZKc1orMTlEVkNTcWtOaXQrRjZ2VFhibmI3a2JwcnZQTlBmakNlQmE0eTlMa3g1NzZ6UmZ3d1VnQkZxRmJKM0xSeWRSU3pjb2pQbGVOY2lyQ1J5OHNwUzAvWW45WFY5cXhrbWxDR01INlVKNGwraER4c2lueC9kQ3IwMkJDeVYrSlhDam9iRmtEVXorYW9FVHJzbXAwTmk2a3JrV2JyZXEyZ3ZOdGlvSzZicTZiZ2dxYkgwbkV0WXBraWZSRm5uSCtZcitMZkVrbCByb290QGttMS52aXJ0b21hdGlvbi5jb20K
-        name: cloudinitvolume
+      - name: cloudinitvolume
+        cloudInitNoCloud:
+          userDataBase64: I2Nsb3VkLWNvbmZpZwpzc2hfcHdhdXRoOiBUcnVlCmRpc2FibGVfcm9vdDogZmFsc2UKc3NoX2F1dGhvcml6ZWRfa2V5czoKLSBzc2gtcnNhIEFBQUFCM056YUMxeWMyRUFBQUFEQVFBQkFBQUJBUURWYURpRDlJOFdZdDNrMXVVYzkzWEF6T1R5a2JtUUJqWjFLS2ZCeUlQeTVMR09NMTJFeno2QTBtemtiNlljKzdZTWNOd3l4WlNhaURLWFpFU3JGWnlZUjlhajVIZEYyT1Vka3liRU5TblFOMld3aVVhQXE0azBiVGI5TjZqb0tzMndNVHlMZGNHVEdUY0pVZkdna0ZyM3B6QjhOckNIYU1PY3hZYWJrL0RpWUs4L2JLUGxhTUdNK0gvSGl6a2UyWnhnZFJGa0hkTUErTFNjR29hbnVNVGxLK2d0Rks0cHBaUEJiNmtxN0JwN0Jad3Rob3kvWW5Wd2F1TDVITmVrN0drNW5LMnpwNkV2ZXZYMmEyNi9lOG80U3NVaHN3eDFqK2dCbDErNzU3YXlGSTMycEdjc0FBN3o2WXBLOTR1dWtZVGNYa0xmYi8xamQ1Sk04dGlpcXpQNSB1c2VyQDQwM2E3YjZiNGY5Ngo=
 ---
 kind: Service
 apiVersion: v1

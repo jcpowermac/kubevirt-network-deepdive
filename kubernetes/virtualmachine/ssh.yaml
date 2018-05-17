@@ -1,0 +1,39 @@
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: mongodb-ssh
+  namespace: nodejs-ex
+  labels:
+    kubevirt.io: virt-launcher
+    kubevirt.io/domain: mongodb
+spec:
+  type: NodePort
+  selector:
+    kubevirt.io: virt-launcher
+    kubevirt.io/domain: mongodb
+  ports:
+  - protocol: TCP
+    nodePort: 30122
+    port: 22
+    targetPort: 22
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: nodejs-ssh
+  namespace: nodejs-ex
+  labels:
+    kubevirt.io: virt-launcher
+    kubevirt.io/domain: nodejs
+spec:
+  type: NodePort
+  selector:
+    kubevirt.io: virt-launcher
+    kubevirt.io/domain: nodejs
+  ports:
+  - protocol: TCP
+    nodePort: 30022
+    port: 22
+    targetPort: 22
